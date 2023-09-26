@@ -1,6 +1,10 @@
 ## climenu
 C application for creating interactive shell menus with custom buttons. Create menus from a text file, navigate using keys, and execute shell commands easily. Useful for simplifying command execution and organization.
 
+
+https://github.com/10xJSChad/climenu/assets/48174610/3fdb2471-ec67-4a28-b369-415ae78f04d5
+
+
 ```
 Usage:
   climenu [ENTRIES FILE]
