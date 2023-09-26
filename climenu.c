@@ -412,7 +412,7 @@ int main(int argc, char** argv) {
     }
     
 
-    /* Not much of a point in freeing the allocated data, 
+    /* Not much of a point in freeing the malloced pointers, 
        just attempt to get everything looking right instead. */
 cleanup:;
     restore_terminal_mode();
