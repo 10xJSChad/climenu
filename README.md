@@ -30,7 +30,6 @@ Requirements:
   Linux (Other *nix-es probably work fine, too)
   A C compiler.
 
-
 Building:
   cc climenu.c
 ```
