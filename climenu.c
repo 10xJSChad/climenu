@@ -119,27 +119,19 @@ char* string_dup(char* str) {
 
 
 char* next_line(char* ptr) {
-    while (*ptr && *ptr != '\n')
-        ++ptr;
-    
-    if (*ptr == '\n')
-        ++ptr;
-    else
-        return NULL;
+    while (*ptr && *(ptr++) != '\n')
+        ;
 
-    return ptr;
+    return (*ptr) ? ptr : NULL;
 }
 
 
 char* get_value(char* ptr) {
     char buf[BUFSIZ] = {0};
     
-    while (*ptr && *ptr != '=')
-        ++ptr;
-    
-    if (*ptr)
-        ++ptr;
-    
+    while (*(ptr++) && *(ptr - 1) != '=')
+        ;
+
     for (int i = 0; i < BUFSIZ - 1 && *ptr && *ptr != '\n'; ++i)
         buf[i] = *(ptr++);
     
@@ -196,12 +188,9 @@ struct Entry* parse_entry_reg(char* ptr) {
     entry_data->exec = NULL;
     entry_data->wait = 0;
 
-    for (int i = 0; i < 3; ++i) {
-        ptr = next_line(ptr);
-        
-        if (ptr == NULL)
-            break;
-            
+    /* This can go past the current entry and into the next one,
+       should be fixed asap. */
+    for (int i = 0; i < 3 && (ptr = next_line(ptr)); ++i) {
         if (string_startswith(ptr, "str=") && entry_data->str == NULL)
             entry_data->str = get_value(ptr);
             
@@ -382,14 +371,34 @@ void set_terminal_mode(void) {
 }
 
 
-uint32_t getch(void) {
+int32_t getch(void) {
     char buf[4] = {0};
-    if (read(0, buf, 4) != -1) {
-        /* A 32 bit int is required */
-        return *(uint32_t*) buf;   
+    return (read(0, buf, 4) != -1) ? *(int32_t*) buf : -1;
+}
+
+
+/* entry_execute is not the correct name for this, since it does not 
+   actually do anything to the entry. */
+void execute_entry(struct Entry* entry) {
+    struct EntryData_Reg* data = entry->data;
+
+    /* Restore so the application we run looks as it should */
+    restore_terminal_mode();
+    cursor_visible(1);
+
+    system("clear");
+    system(data->exec);
+    cursor_visible(0);
+
+    if (data->wait) {
+        set_terminal_mode();
+        printf("Press any key to continue...\n");
+        getch();
     } else {
-        return 0;
+        set_terminal_mode();
     }
+
+    system("clear");
 }
 
 
@@ -422,28 +431,16 @@ int main(int argc, char** argv) {
             
             case KEY_SPACE:
             case KEY_ENTER:;
-                struct EntryData_Reg* data = g_selected->data;
-
-                restore_terminal_mode();
-                system("clear");
-                system(data->exec);
-                
-                if (data->wait) {
-                    set_terminal_mode();
-                    printf("Press any key to continue...\n");
-                    getch();
-                } else {
-                    set_terminal_mode();
-                }
-
-                system("clear");
-
+                execute_entry(g_selected);
                 break;
 
             case KEY_Q:
             case KEY_CTRLC:
                 goto cleanup;
 
+            case -1:
+                error_exit("Failed to read stdin");
+                
             default:
                 break;
         }
