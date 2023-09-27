@@ -15,6 +15,7 @@
 #define KEY_ENTER   0xD
 #define KEY_SPACE   0x20
 #define KEY_Q       0x71
+#define KEY_CTRLC   0x03
 
 #define DRAW_CENTERED   0
 
@@ -50,6 +51,12 @@ struct Entry*  g_selected = NULL;
 struct termios g_termios_original;
 
 
+void error_exit(char* msg) {
+    printf("%s\n", msg);
+    exit(EXIT_FAILURE);
+}
+
+
 size_t get_filesize(FILE* file_ptr) {
     size_t size;
 
@@ -72,7 +79,7 @@ char* read_file(char* path) {
         return NULL;
     
     file_size = get_filesize(file_ptr);
-    buf = malloc(file_size);
+    buf = calloc(1, file_size + 1);
 
     if (buf == NULL) {
         fclose(file_ptr);
@@ -80,20 +87,20 @@ char* read_file(char* path) {
     }    
 
     fread(buf, 1, file_size, file_ptr);
-
     fclose(file_ptr);
     return buf;
 }
 
 
 int string_startswith(char* a, char* b) {
-    while (*a && *b) {
+    while (*a) {
         if (*b == '\0')
             return 1;
 
         if (*(a++) != *(b++))
             return 0;
     }
+    
     return 1;
 }
 
@@ -101,17 +108,25 @@ int string_startswith(char* a, char* b) {
 char* string_dup(char* str) {
     char* new_str;
     
-    new_str = calloc(1, strlen(str));
-    strcpy(new_str, str);
+    new_str = calloc(1, strlen(str) + 1);
 
+    if (new_str == NULL)
+        error_exit("calloc returned NULL");
+
+    strcpy(new_str, str);
     return new_str;
 }
 
 
 char* next_line(char* ptr) {
-    while (*ptr && *(ptr++) != '\n')
-        ;
+    while (*ptr && *ptr != '\n')
+        ++ptr;
     
+    if (*ptr == '\n')
+        ++ptr;
+    else
+        return NULL;
+
     return ptr;
 }
 
@@ -122,7 +137,8 @@ char* get_value(char* ptr) {
     while (*ptr && *ptr != '=')
         ++ptr;
     
-    ++ptr;
+    if (*ptr)
+        ++ptr;
     
     for (int i = 0; i < BUFSIZ - 1 && *ptr && *ptr != '\n'; ++i)
         buf[i] = *(ptr++);
@@ -152,6 +168,23 @@ void entry_append(struct Entry* head, struct Entry* node) {
 }
 
 
+void entry_destroy(struct Entry* entry) {
+    if (entry->type == ET_REG) {
+        struct EntryData_Reg* data = entry->data;
+        free(data->exec);
+        free(data->str);
+    }
+
+    if (entry->type == ET_HEADER) {
+        struct EntryData_Header* data = entry->data;
+        free(data->str);
+    }
+
+    free(entry->data);
+    free(entry);
+}
+
+
 struct Entry* parse_entry_reg(char* ptr) {
     struct Entry* entry;
     struct EntryData_Reg* entry_data;
@@ -175,8 +208,11 @@ struct Entry* parse_entry_reg(char* ptr) {
         if (string_startswith(ptr, "exec=") && entry_data->exec == NULL)
             entry_data->exec = get_value(ptr);
 
-        if (string_startswith(ptr, "wait=") && entry_data->wait == 0)
-            entry_data->wait = strcmp(get_value(ptr), "true") == 0;
+        if (string_startswith(ptr, "wait=") && entry_data->wait == 0) {
+            char* wait_val = get_value(ptr);
+            entry_data->wait = strcmp(wait_val, "true") == 0;
+            free(wait_val);
+        }
     }
 
     entry->data = entry_data;
@@ -208,6 +244,10 @@ struct Entry* parse_entries(char* entries_path) {
     char* ptr;
 
     file_content = read_file(entries_path);
+    
+    if (file_content == NULL)
+        error_exit("Failed to read entries file");
+    
     ptr = file_content;
 
     while (*ptr) {
@@ -228,8 +268,12 @@ struct Entry* parse_entries(char* entries_path) {
         }
         
         ptr = next_line(ptr);
+        
+        if (ptr == NULL)
+            break;
     }
     
+    free(file_content);
     return entry_head;
 }
 
@@ -349,12 +393,6 @@ uint32_t getch(void) {
 }
 
 
-void error_exit(char* msg) {
-    printf("%s\n", msg);
-    exit(EXIT_FAILURE);
-}
-
-
 int main(int argc, char** argv) {
     struct Entry* head;
 
@@ -363,7 +401,6 @@ int main(int argc, char** argv) {
     else
         error_exit("No entries file provided");
 
-    
     select_entry(head);
     set_terminal_mode();
     system("clear");
@@ -404,6 +441,7 @@ int main(int argc, char** argv) {
                 break;
 
             case KEY_Q:
+            case KEY_CTRLC:
                 goto cleanup;
 
             default:
@@ -412,9 +450,14 @@ int main(int argc, char** argv) {
     }
     
 
-    /* Not much of a point in freeing the malloced pointers, 
-       just attempt to get everything looking right instead. */
 cleanup:;
+    while (head->next) {
+        head = head->next;
+        entry_destroy(head->prev);
+    }
+
+    entry_destroy(head);
+
     restore_terminal_mode();
     cursor_pos(0, 0);
     cursor_visible(1);
