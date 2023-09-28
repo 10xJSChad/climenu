@@ -37,7 +37,7 @@ Entry format:
 
 
 ### Roadmap:
-  - [ ]  Scrolling, currently it does not scroll and thus you can't *really* have a whole lot of entries.
+  - [x]  Scrolling, currently it does not scroll and thus you can't *really* have a whole lot of entries.
   - [ ]  More dynamic entry text, would be nice if an entry could conditionally change its text and color.
   - [ ]  Not a feature, but the parser isn't great to look at, should be rewritten for clarity.
 
