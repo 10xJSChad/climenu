@@ -4,6 +4,28 @@ C application for creating interactive shell menus with custom buttons. Create m
 
 https://github.com/10xJSChad/climenu/assets/48174610/3fdb2471-ec67-4a28-b369-415ae78f04d5
 
+<br>
+
+### Features:
+  - Incredibly simple config syntax, adding entries is a breeze.
+  - No external dependencies, it'll easily compile on anything that resembles Linux.
+  - Runs just fine on any terminal emulator that supports common ANSI escape codes.
+
+<br>
+
+### Roadmap:
+  - [ ]  Scrolling, currently it does not scroll and thus you can't *really* have a whole lot of entries.
+  - [ ]  More dynamic entry text, would be nice if an entry could conditionally change its text and color.
+  - [ ]  Not a feature, but the parser isn't great to look at, should be rewritten for clarity.
+
+<br>
+
+### Contribution Guidelines:
+  * Do not refactor unless you're already adding or fixing something. If the code has nothing to do with what you're trying to accomplish, don't refactor it. Do feel free to change anything in the vicinity of the code you *are* working on, though.
+  * Keep the scope of your contribution small and simple, climenu is not supposed to be feature-packed and super customizable, please try to keep your features as general as possible, we don't need to meet the needs of every user.
+  * The program must still compile with a simple ```gcc climenu.c``` when you're done, this is less of a guideline and more of a hard rule.
+
+<br>
 
 ```
 Usage:
