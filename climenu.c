@@ -7,6 +7,28 @@
 #include <stdint.h>
 
 
+#define COLOR_DEFAULT ""
+#define COLOR_RESET      "\033[0m"
+
+#define COLOR_FG_BLACK   "\033[30m"
+#define COLOR_FG_RED     "\033[31m"
+#define COLOR_FG_GREEN   "\033[32m"
+#define COLOR_FG_YELLOW  "\033[33m"
+#define COLOR_FG_BLUE    "\033[34m"
+#define COLOR_FG_MAGENTA "\033[35m"
+#define COLOR_FG_CYAN    "\033[36m"
+#define COLOR_FG_WHITE   "\033[37m"
+
+#define COLOR_BG_BLACK   "\033[40m"
+#define COLOR_BG_RED     "\033[41m"
+#define COLOR_BG_GREEN   "\033[42m"
+#define COLOR_BG_YELLOW  "\033[43m"
+#define COLOR_BG_BLUE    "\033[44m"
+#define COLOR_BG_MAGENTA "\033[45m"
+#define COLOR_BG_CYAN    "\033[46m"
+#define COLOR_BG_WHITE   "\033[47m"
+
+
 /* Key codes */
 #define KEY_J       0x6A
 #define KEY_K       0x6B
@@ -17,31 +39,38 @@
 #define KEY_Q       0x71
 #define KEY_CTRLC   0x03
 
-#define DRAW_CENTERED   0
+
+enum ColorMode {
+    CM_NONE     = 0,
+    CM_SELECTED
+};
 
 
 enum EntryType {
     ET_NONE     = 0,
-    ET_REG      = 1,
-    ET_HEADER   = 2
+    ET_REG,
+    ET_HEADER
+};
+
+
+struct EntryText {
+    char* str;
+    char* fgcolor;
+    char* bgcolor;
 };
 
 
 struct EntryData_Reg {
-    char* str;
     char* exec;
     int   wait;
-};
-
-
-struct EntryData_Header {
-    char* str;
+    int   colormode;
 };
 
 
 struct Entry {
     struct Entry* next;
     struct Entry* prev;
+    struct EntryText* text;
     void* data;
     char  type;
 };
@@ -142,10 +171,15 @@ char* get_value(char* ptr) {
 struct Entry* entry_create(enum EntryType type) {
     struct Entry* new_entry;
     
-    new_entry = malloc(sizeof *new_entry);
+    new_entry       = malloc(sizeof *new_entry);
     new_entry->type = type;
     new_entry->next = NULL;
     new_entry->prev = NULL;
+
+    new_entry->text             = malloc(sizeof *new_entry->text);
+    new_entry->text->str        = NULL;
+    new_entry->text->fgcolor    = COLOR_DEFAULT;
+    new_entry->text->bgcolor    = COLOR_DEFAULT;
 
     return new_entry;
 }
@@ -164,16 +198,31 @@ void entry_destroy(struct Entry* entry) {
     if (entry->type == ET_REG) {
         struct EntryData_Reg* data = entry->data;
         free(data->exec);
-        free(data->str);
+        free(data);
     }
 
-    if (entry->type == ET_HEADER) {
-        struct EntryData_Header* data = entry->data;
-        free(data->str);
-    }
+    if (entry->text->str)
+        free(entry->text->str);
 
-    free(entry->data);
+    free(entry->text);
     free(entry);
+}
+
+
+char* parse_color(char* color, int fg) {
+    if (color == NULL)
+        return NULL;
+        
+    if (strcmp(color, "black")   == 0)  return fg ? COLOR_FG_BLACK   : COLOR_BG_BLACK;
+    if (strcmp(color, "blue")    == 0)  return fg ? COLOR_FG_BLUE    : COLOR_BG_BLUE;
+    if (strcmp(color, "cyan")    == 0)  return fg ? COLOR_FG_CYAN    : COLOR_BG_CYAN;
+    if (strcmp(color, "green")   == 0)  return fg ? COLOR_FG_GREEN   : COLOR_BG_GREEN;
+    if (strcmp(color, "magenta") == 0)  return fg ? COLOR_FG_MAGENTA : COLOR_BG_MAGENTA;
+    if (strcmp(color, "red")     == 0)  return fg ? COLOR_FG_RED     : COLOR_BG_RED;
+    if (strcmp(color, "white")   == 0)  return fg ? COLOR_FG_WHITE   : COLOR_BG_WHITE;
+    if (strcmp(color, "yellow")  == 0)  return fg ? COLOR_FG_YELLOW  : COLOR_BG_YELLOW;
+
+    return NULL;
 }
 
 
@@ -184,42 +233,33 @@ struct Entry* parse_entry_reg(char* ptr) {
     entry = entry_create(ET_REG);
     entry_data = malloc(sizeof *entry_data);
     
-    entry_data->str = NULL;
     entry_data->exec = NULL;
     entry_data->wait = 0;
+    entry_data->colormode = CM_NONE;
 
-    /* This can go past the current entry and into the next one,
-       should be fixed asap. */
-    for (int i = 0; i < 3 && (ptr = next_line(ptr)); ++i) {
-        if (string_startswith(ptr, "str=") && entry_data->str == NULL)
-            entry_data->str = get_value(ptr);
-            
+
+    while ( (ptr = next_line(ptr)) ) {
+        char* val_ptr = NULL;
+
+        if (string_startswith(ptr, "["))
+            break;
+
         if (string_startswith(ptr, "exec=") && entry_data->exec == NULL)
             entry_data->exec = get_value(ptr);
 
-        if (string_startswith(ptr, "wait=") && entry_data->wait == 0) {
-            char* wait_val = get_value(ptr);
-            entry_data->wait = strcmp(wait_val, "true") == 0;
-            free(wait_val);
+        if (string_startswith(ptr, "wait=") && entry_data->wait == 0)
+            entry_data->wait = strcmp((val_ptr = get_value(ptr)), "true") == 0;
+
+        if (string_startswith(ptr, "colormode=") && entry_data->colormode == CM_NONE) {
+            val_ptr = get_value(ptr);
+
+            if (strcmp(val_ptr, "selected") == 0) 
+                entry_data->colormode = CM_SELECTED;
         }
+        
+        if (val_ptr)
+            free(val_ptr);
     }
-
-    entry->data = entry_data;
-    return entry;
-}
-
-
-struct Entry* parse_entry_header(char* ptr) {
-    struct Entry* entry;
-    struct EntryData_Header* entry_data;
-
-    entry = entry_create(ET_HEADER);
-    entry_data = malloc(sizeof *entry_data);
-    
-    ptr = next_line(ptr);
-
-    if (string_startswith(ptr, "str="))
-        entry_data->str = get_value(ptr);
 
     entry->data = entry_data;
     return entry;
@@ -246,18 +286,38 @@ struct Entry* parse_entries(char* entries_path) {
             entry_curr = parse_entry_reg(ptr);
 
         if (string_startswith(ptr, "[Header]")) 
-            entry_curr = parse_entry_header(ptr);
+            entry_curr = entry_create(ET_HEADER);
         
         if (entry_curr) {
+            while ( (ptr = next_line(ptr)) ) {
+                char* val_ptr = NULL;
+                
+                if (string_startswith(ptr, "["))
+                    break;
+
+                if (string_startswith(ptr, "str="))
+                    entry_curr->text->str = get_value(ptr);
+
+                if (string_startswith(ptr, "fgcolor="))
+                    entry_curr->text->fgcolor = parse_color((val_ptr = get_value(ptr)), 1);
+
+                if (string_startswith(ptr, "bgcolor="))
+                    entry_curr->text->bgcolor = parse_color(val_ptr = get_value(ptr), 0);
+
+                if (val_ptr)
+                    free(val_ptr);
+            }
+
             if (entry_head == NULL) {
                 entry_head = entry_curr;
             } else {
                 entry_append(entry_head, entry_curr);
             }
+
+        } else {
+            ptr = next_line(ptr);
         }
-        
-        ptr = next_line(ptr);
-        
+
         if (ptr == NULL)
             break;
     }
@@ -304,48 +364,43 @@ void cursor_pos(int x, int y) {
 
 
 void cursor_visible(int vis) {
-    if (vis)
-        printf("\033[?25h");
-    else
-        printf("\033[?25l");
+    printf(vis ? "\033[?25h" : "\033[?25l");
+}
+
+
+void entry_print(struct Entry* entry, int selected) {
+    int allow_color = 1;
+    
+    if (entry->type == ET_REG) {
+        struct EntryData_Reg* data = entry->data;
+     
+        if (data->colormode == CM_SELECTED && !selected)
+            allow_color = 0;
+    }
+
+    printf("%s%s%s%s%s%s       ",   entry->type == ET_HEADER ? "\033[4m" : "",
+                                    allow_color ? entry->text->fgcolor : "", 
+                                    allow_color ? entry->text->bgcolor : "", 
+                                    entry->text->str,
+                                    selected ? " (*)" : "",
+                                    COLOR_RESET);
 }
 
 
 void draw(struct Entry* head) {
-    struct winsize w;
     struct Entry* cursor = head;
-    
-    int x;
-    int y;
+    int x, y;
 
-    ioctl(0, TIOCGWINSZ, &w);
-    
-    if (DRAW_CENTERED) {
-        x = (w.ws_col / 2);
-        y = (w.ws_row / 2);
-    } else {
-        x = 0;
-        y = 0;
-    }
-
-    cursor_visible(0);
-    
+    x = y = 0;    
     while (cursor) {
         cursor_pos(x, ++y);
         
         if (cursor->type == ET_HEADER) {
-            struct EntryData_Header* data = cursor->data;
-            printf("\033[4m%s\033[24m", data->str);
+            entry_print(cursor, 0);
         }
         
-        if (cursor->type == ET_REG) {
-            struct EntryData_Reg* data = cursor->data;
-
-            if (cursor == g_selected)
-                printf("%s (*)", data->str);
-            else
-                printf("%s       ", data->str);
-        }
+        if (cursor->type == ET_REG)
+            entry_print(cursor, (cursor == g_selected));
         
         cursor = cursor->next;
     }
@@ -401,7 +456,6 @@ void execute_entry(struct Entry* entry) {
     system("clear");
 }
 
-
 int main(int argc, char** argv) {
     struct Entry* head;
 
@@ -412,6 +466,7 @@ int main(int argc, char** argv) {
 
     select_entry(head);
     set_terminal_mode();
+    cursor_visible(0);
     system("clear");
 
     while (1) {
