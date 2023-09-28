@@ -18,8 +18,8 @@ Entry format:
   -Properties-
   All:
     str:     Specifies the text to display for the header or button.
-    fgcolor: (Optional) foreground color
-    bgcolor: (Optional) background color
+    fgcolor: (Optional) foreground color. [Values: black, blue, cyan, green, magenta, red, white, yellow]
+    bgcolor: (Optional) background color. [Values: black, blue, cyan, green, magenta, red, white, yellow]
 
   Entry:
     exec:      Specifies the shell command to execute when the button is pressed.
