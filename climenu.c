@@ -28,7 +28,6 @@
 #define COLOR_BG_CYAN    "\033[46m"
 #define COLOR_BG_WHITE   "\033[47m"
 
-
 /* Key codes */
 #define KEY_J       0x6A
 #define KEY_K       0x6B
@@ -71,13 +70,20 @@ struct Entry {
     struct Entry* next;
     struct Entry* prev;
     struct EntryText* text;
-    void* data;
-    char  type;
+    void*  data;
+    size_t index;
+    char   type;
 };
 
 
-struct Entry*  g_selected = NULL;
+struct Entry*  g_selected    = NULL;
+size_t         g_entry_count = 0;
 struct termios g_termios_original;
+
+
+void clear_screen(void) {
+    system("clear");
+}
 
 
 void error_exit(char* msg) {
@@ -101,19 +107,19 @@ char* read_file(char* path) {
     FILE*  file_ptr;
     size_t file_size;
     char*  buf;
-    
+
     file_ptr = fopen(path, "r");
-    
+
     if (file_ptr == NULL)
         return NULL;
-    
+
     file_size = get_filesize(file_ptr);
     buf = calloc(1, file_size + 1);
 
     if (buf == NULL) {
         fclose(file_ptr);
         return NULL;
-    }    
+    }
 
     fread(buf, 1, file_size, file_ptr);
     fclose(file_ptr);
@@ -129,14 +135,14 @@ int string_startswith(char* a, char* b) {
         if (*(a++) != *(b++))
             return 0;
     }
-    
+
     return 1;
 }
 
 
 char* string_dup(char* str) {
     char* new_str;
-    
+
     new_str = calloc(1, strlen(str) + 1);
 
     if (new_str == NULL)
@@ -157,24 +163,25 @@ char* next_line(char* ptr) {
 
 char* get_value(char* ptr) {
     char buf[BUFSIZ] = {0};
-    
+
     while (*(ptr++) && *(ptr - 1) != '=')
         ;
 
     for (int i = 0; i < BUFSIZ - 1 && *ptr && *ptr != '\n'; ++i)
         buf[i] = *(ptr++);
-    
+
     return string_dup(buf);
 }
 
 
 struct Entry* entry_create(enum EntryType type) {
     struct Entry* new_entry;
-    
-    new_entry       = malloc(sizeof *new_entry);
-    new_entry->type = type;
-    new_entry->next = NULL;
-    new_entry->prev = NULL;
+
+    new_entry        = malloc(sizeof *new_entry);
+    new_entry->type  = type;
+    new_entry->next  = NULL;
+    new_entry->prev  = NULL;
+    new_entry->index = g_entry_count++;
 
     new_entry->text             = malloc(sizeof *new_entry->text);
     new_entry->text->str        = NULL;
@@ -188,7 +195,7 @@ struct Entry* entry_create(enum EntryType type) {
 void entry_append(struct Entry* head, struct Entry* node) {
     while (head->next)
         head = head->next;
-    
+
     head->next = node;
     node->prev = head;
 }
@@ -201,9 +208,7 @@ void entry_destroy(struct Entry* entry) {
         free(data);
     }
 
-    if (entry->text->str)
-        free(entry->text->str);
-
+    free(entry->text->str);
     free(entry->text);
     free(entry);
 }
@@ -212,7 +217,7 @@ void entry_destroy(struct Entry* entry) {
 char* parse_color(char* color, int fg) {
     if (color == NULL)
         return NULL;
-        
+
     if (strcmp(color, "black")   == 0)  return fg ? COLOR_FG_BLACK   : COLOR_BG_BLACK;
     if (strcmp(color, "blue")    == 0)  return fg ? COLOR_FG_BLUE    : COLOR_BG_BLUE;
     if (strcmp(color, "cyan")    == 0)  return fg ? COLOR_FG_CYAN    : COLOR_BG_CYAN;
@@ -232,7 +237,7 @@ struct Entry* parse_entry_reg(char* ptr) {
 
     entry = entry_create(ET_REG);
     entry_data = malloc(sizeof *entry_data);
-    
+
     entry_data->exec = NULL;
     entry_data->wait = 0;
     entry_data->colormode = CM_NONE;
@@ -253,12 +258,11 @@ struct Entry* parse_entry_reg(char* ptr) {
         if (string_startswith(ptr, "colormode=") && entry_data->colormode == CM_NONE) {
             val_ptr = get_value(ptr);
 
-            if (strcmp(val_ptr, "selected") == 0) 
+            if (strcmp(val_ptr, "selected") == 0)
                 entry_data->colormode = CM_SELECTED;
         }
-        
-        if (val_ptr)
-            free(val_ptr);
+
+        free(val_ptr);
     }
 
     entry->data = entry_data;
@@ -273,25 +277,25 @@ struct Entry* parse_entries(char* entries_path) {
     char* ptr;
 
     file_content = read_file(entries_path);
-    
+
     if (file_content == NULL)
         error_exit("Failed to read entries file");
-    
+
     ptr = file_content;
 
     while (*ptr) {
         struct Entry* entry_curr = NULL;
 
-        if (string_startswith(ptr, "[Entry]")) 
+        if (string_startswith(ptr, "[Entry]"))
             entry_curr = parse_entry_reg(ptr);
 
-        if (string_startswith(ptr, "[Header]")) 
+        if (string_startswith(ptr, "[Header]"))
             entry_curr = entry_create(ET_HEADER);
-        
+
         if (entry_curr) {
             while ( (ptr = next_line(ptr)) ) {
                 char* val_ptr = NULL;
-                
+
                 if (string_startswith(ptr, "["))
                     break;
 
@@ -304,8 +308,7 @@ struct Entry* parse_entries(char* entries_path) {
                 if (string_startswith(ptr, "bgcolor="))
                     entry_curr->text->bgcolor = parse_color(val_ptr = get_value(ptr), 0);
 
-                if (val_ptr)
-                    free(val_ptr);
+                free(val_ptr);
             }
 
             if (entry_head == NULL) {
@@ -321,7 +324,7 @@ struct Entry* parse_entries(char* entries_path) {
         if (ptr == NULL)
             break;
     }
-    
+
     free(file_content);
     return entry_head;
 }
@@ -347,10 +350,10 @@ void select_next(void) {
 void select_prev(void) {
     if (g_selected->prev) {
         g_selected = g_selected->prev;
-        
+
         if (g_selected->type != ET_REG) {
             select_prev();
-            
+
             if (g_selected->type != ET_REG)
                 select_next();
         }
@@ -370,17 +373,17 @@ void cursor_visible(int vis) {
 
 void entry_print(struct Entry* entry, int selected) {
     int allow_color = 1;
-    
+
     if (entry->type == ET_REG) {
         struct EntryData_Reg* data = entry->data;
-     
+
         if (data->colormode == CM_SELECTED && !selected)
             allow_color = 0;
     }
 
     printf("%s%s%s%s%s%s       ",   entry->type == ET_HEADER ? "\033[4m" : "",
-                                    allow_color ? entry->text->fgcolor : "", 
-                                    allow_color ? entry->text->bgcolor : "", 
+                                    allow_color ? entry->text->fgcolor : "",
+                                    allow_color ? entry->text->bgcolor : "",
                                     entry->text->str,
                                     selected ? " (*)" : "",
                                     COLOR_RESET);
@@ -389,19 +392,32 @@ void entry_print(struct Entry* entry, int selected) {
 
 void draw(struct Entry* head) {
     struct Entry* cursor = head;
+    struct winsize window;
     int x, y;
 
-    x = y = 0;    
-    while (cursor) {
-        cursor_pos(x, ++y);
+    ioctl(0, TIOCGWINSZ, &window);
+    clear_screen();
+
+    /* Scrolling */
+    for (int i = 0; (window.ws_row + i) <= g_selected->index; ++i) {
+        if (cursor->next)
+            cursor = cursor->next;
+    }
         
+    x = y = 0;
+    while (cursor) {
+        if (++y <= window.ws_row)
+            cursor_pos(x, y);
+        else
+            break;
+
         if (cursor->type == ET_HEADER) {
             entry_print(cursor, 0);
         }
-        
+
         if (cursor->type == ET_REG)
             entry_print(cursor, (cursor == g_selected));
-        
+
         cursor = cursor->next;
     }
 
@@ -432,7 +448,7 @@ int32_t getch(void) {
 }
 
 
-/* entry_execute is not the correct name for this, since it does not 
+/* entry_execute is not the correct name for this, since it does not
    actually do anything to the entry. */
 void execute_entry(struct Entry* entry) {
     struct EntryData_Reg* data = entry->data;
@@ -441,7 +457,7 @@ void execute_entry(struct Entry* entry) {
     restore_terminal_mode();
     cursor_visible(1);
 
-    system("clear");
+    clear_screen();
     system(data->exec);
     cursor_visible(0);
 
@@ -453,7 +469,7 @@ void execute_entry(struct Entry* entry) {
         set_terminal_mode();
     }
 
-    system("clear");
+    clear_screen();
 }
 
 int main(int argc, char** argv) {
@@ -467,7 +483,7 @@ int main(int argc, char** argv) {
     select_entry(head);
     set_terminal_mode();
     cursor_visible(0);
-    system("clear");
+    clear_screen();
 
     while (1) {
         draw(head);
@@ -478,12 +494,12 @@ int main(int argc, char** argv) {
             case KEY_UP:
                 select_prev();
                 break;
-            
+
             case KEY_J:
             case KEY_DOWN:
                 select_next();
                 break;
-            
+
             case KEY_SPACE:
             case KEY_ENTER:;
                 execute_entry(g_selected);
@@ -495,12 +511,12 @@ int main(int argc, char** argv) {
 
             case -1:
                 error_exit("Failed to read stdin");
-                
+
             default:
                 break;
         }
     }
-    
+
 
 cleanup:;
     while (head->next) {
@@ -513,6 +529,6 @@ cleanup:;
     restore_terminal_mode();
     cursor_pos(0, 0);
     cursor_visible(1);
-    system("clear");
+    clear_screen();
     return EXIT_SUCCESS;
 }
