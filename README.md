@@ -16,13 +16,15 @@ Entry format:
   [Entry]: Defines a button with a label and a shell command to execute.
   
   -Properties-
-  Header and Entry:
-  str: Specifies the text to display for the header or button.
-  
-  Entry:
-  exec: Specifies the shell command to execute when the button is pressed.
-  wait: Optional. If set to true, the program waits for a key press after executing the command.
+  All:
+    str:     Specifies the text to display for the header or button.
+    fgcolor: (Optional) foreground color
+    bgcolor: (Optional) background color
 
+  Entry:
+    exec:      Specifies the shell command to execute when the button is pressed.
+    wait:      (Optional) If set to true, the program waits for a key press after executing the command.
+    colormode: (Optional) When the entry should be displayed in color. [Values: selected]
 ```
 
 ```
