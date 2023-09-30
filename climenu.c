@@ -38,6 +38,9 @@
 #define KEY_Q       0x71
 #define KEY_CTRLC   0x03
 
+#define PROPERTY(key_str, data_type) {.key = key_str, .type = data_type, .val = NULL }
+#define COUNT_OF(arr) (sizeof arr / sizeof *arr)
+
 
 enum ColorMode {
     CM_NONE     = 0,
@@ -52,43 +55,73 @@ enum EntryType {
 };
 
 
-struct EntryText {
-    char* str;
-    char* fgcolor;
-    char* bgcolor;
+enum KeyType {
+    KT_NONE = 0,
+    KT_STR,
+    KT_INT,
+    KT_BOOL
 };
 
 
-struct EntryData_Reg {
-    char* exec;
-    int   wait;
-    int   colormode;
+struct EntryKey {
+    char* key;
+    char* val;
+    int   type;
 };
 
 
 struct Entry {
     struct Entry* next;
     struct Entry* prev;
-    struct EntryText* text;
-    void*  data;
+    struct EntryKey* keys;
+    size_t keys_count;
     size_t index;
     char   type;
 };
 
+
+struct EntryKey g_parameter_keys[] = { 
+    PROPERTY("str",         KT_STR),
+    PROPERTY("fgcolor",     KT_STR),
+    PROPERTY("bgcolor",     KT_STR),
+    PROPERTY("exec",        KT_STR),
+    PROPERTY("colormode",   KT_STR),
+    PROPERTY("wait",        KT_STR)
+};
 
 struct Entry*  g_selected    = NULL;
 size_t         g_entry_count = 0;
 struct termios g_termios_original;
 
 
-void clear_screen(void) {
-    system("clear");
-}
-
-
 void error_exit(char* msg) {
     printf("%s\n", msg);
     exit(EXIT_FAILURE);
+}
+
+
+void* xmalloc(size_t size) {
+    void* ptr = malloc(size);
+    
+    if (ptr == NULL)
+        error_exit("malloc failed");
+    
+    return ptr;
+}
+
+
+void* xcalloc(size_t n, size_t size) {
+    void* ptr = calloc(n, size);
+    
+    if (ptr == NULL)
+        error_exit("calloc failed");
+    
+    return ptr;
+}
+
+
+void clear_screen(void) {
+    system("clear");
 }
 
 
@@ -111,15 +144,10 @@ char* read_file(char* path) {
     file_ptr = fopen(path, "r");
 
     if (file_ptr == NULL)
-        return NULL;
+        error_exit("failed to open file");
 
     file_size = get_filesize(file_ptr);
-    buf = calloc(1, file_size + 1);
-
-    if (buf == NULL) {
-        fclose(file_ptr);
-        return NULL;
-    }
+    buf = xcalloc(1, file_size + 1);
 
     fread(buf, 1, file_size, file_ptr);
     fclose(file_ptr);
@@ -141,12 +169,7 @@ int string_startswith(char* a, char* b) {
 
 
 char* string_dup(char* str) {
-    char* new_str;
-
-    new_str = calloc(1, strlen(str) + 1);
-
-    if (new_str == NULL)
-        error_exit("calloc returned NULL");
+    char* new_str = xcalloc(1, strlen(str) + 1);
 
     strcpy(new_str, str);
     return new_str;
@@ -175,18 +198,14 @@ char* get_value(char* ptr) {
 
 
 struct Entry* entry_create(enum EntryType type) {
-    struct Entry* new_entry;
+    struct Entry* new_entry = xmalloc(sizeof *new_entry);;
 
-    new_entry        = malloc(sizeof *new_entry);
-    new_entry->type  = type;
-    new_entry->next  = NULL;
-    new_entry->prev  = NULL;
-    new_entry->index = g_entry_count++;
-
-    new_entry->text             = malloc(sizeof *new_entry->text);
-    new_entry->text->str        = NULL;
-    new_entry->text->fgcolor    = COLOR_DEFAULT;
-    new_entry->text->bgcolor    = COLOR_DEFAULT;
+    new_entry->type         = type;
+    new_entry->next         = NULL;
+    new_entry->prev         = NULL;
+    new_entry->index        = g_entry_count++;
+    new_entry->keys_count   = 0;
+    new_entry->keys         = NULL;
 
     return new_entry;
 }
@@ -202,14 +221,13 @@ void entry_append(struct Entry* head, struct Entry* node) {
 
 
 void entry_destroy(struct Entry* entry) {
-    if (entry->type == ET_REG) {
-        struct EntryData_Reg* data = entry->data;
-        free(data->exec);
-        free(data);
+    if (entry->keys) {
+        for (size_t i = 0; i < entry->keys_count; ++i)
+            free(entry->keys[i].val);
+
+        free(entry->keys);
     }
 
-    free(entry->text->str);
-    free(entry->text);
     free(entry);
 }
 
@@ -227,103 +245,65 @@ char* parse_color(char* color, int fg) {
     if (strcmp(color, "white")   == 0)  return fg ? COLOR_FG_WHITE   : COLOR_BG_WHITE;
     if (strcmp(color, "yellow")  == 0)  return fg ? COLOR_FG_YELLOW  : COLOR_BG_YELLOW;
 
-    return NULL;
+    return "";
 }
 
 
-struct Entry* parse_entry_reg(char* ptr) {
+void entry_copy_keys(struct Entry* entry) {
+    int j = 0;
+    entry->keys = xmalloc(entry->keys_count * sizeof *entry->keys);  
+    
+    for (size_t i = 0; i < COUNT_OF(g_parameter_keys); ++i) {
+        if (g_parameter_keys[i].val) {
+            entry->keys[j++] = g_parameter_keys[i];
+            g_parameter_keys[i].val = NULL;
+        }
+    }
+}
+
+
+struct Entry* parse_entry(char* ptr) {
     struct Entry* entry;
-    struct EntryData_Reg* entry_data;
-
-    entry = entry_create(ET_REG);
-    entry_data = malloc(sizeof *entry_data);
-
-    entry_data->exec = NULL;
-    entry_data->wait = 0;
-    entry_data->colormode = CM_NONE;
-
-
+    
+    if      (string_startswith(ptr, "[Entry]"))  entry = entry_create(ET_REG);
+    else if (string_startswith(ptr, "[Header]")) entry = entry_create(ET_HEADER);
+    else return NULL;
+    
     while ( (ptr = next_line(ptr)) ) {
-        char* val_ptr = NULL;
-
         if (string_startswith(ptr, "["))
             break;
-
-        if (string_startswith(ptr, "exec=") && entry_data->exec == NULL)
-            entry_data->exec = get_value(ptr);
-
-        if (string_startswith(ptr, "wait=") && entry_data->wait == 0)
-            entry_data->wait = strcmp((val_ptr = get_value(ptr)), "true") == 0;
-
-        if (string_startswith(ptr, "colormode=") && entry_data->colormode == CM_NONE) {
-            val_ptr = get_value(ptr);
-
-            if (strcmp(val_ptr, "selected") == 0)
-                entry_data->colormode = CM_SELECTED;
+            
+        for (size_t i = 0; i < COUNT_OF(g_parameter_keys); ++i) {
+            if (string_startswith(ptr, g_parameter_keys[i].key)) {
+                g_parameter_keys[i].val = get_value(ptr);
+                ++entry->keys_count;
+            }    
         }
-
-        free(val_ptr);
     }
 
-    entry->data = entry_data;
+    entry_copy_keys(entry);
     return entry;
 }
 
 
 struct Entry* parse_entries(char* entries_path) {
     struct Entry* entry_head = NULL;
+    struct Entry* entry_curr = NULL;
 
-    char* file_content;
-    char* ptr;
-
-    file_content = read_file(entries_path);
-
-    if (file_content == NULL)
-        error_exit("Failed to read entries file");
-
-    ptr = file_content;
-
-    while (*ptr) {
-        struct Entry* entry_curr = NULL;
-
-        if (string_startswith(ptr, "[Entry]"))
-            entry_curr = parse_entry_reg(ptr);
-
-        if (string_startswith(ptr, "[Header]"))
-            entry_curr = entry_create(ET_HEADER);
+    char* file_content = read_file(entries_path);
+    char* ptr          = file_content;
+    
+    do {
+        entry_curr = string_startswith(ptr, "[") ? parse_entry(ptr) : NULL;
 
         if (entry_curr) {
-            while ( (ptr = next_line(ptr)) ) {
-                char* val_ptr = NULL;
-
-                if (string_startswith(ptr, "["))
-                    break;
-
-                if (string_startswith(ptr, "str="))
-                    entry_curr->text->str = get_value(ptr);
-
-                if (string_startswith(ptr, "fgcolor="))
-                    entry_curr->text->fgcolor = parse_color((val_ptr = get_value(ptr)), 1);
-
-                if (string_startswith(ptr, "bgcolor="))
-                    entry_curr->text->bgcolor = parse_color(val_ptr = get_value(ptr), 0);
-
-                free(val_ptr);
-            }
-
-            if (entry_head == NULL) {
-                entry_head = entry_curr;
-            } else {
+            if (entry_head)
                 entry_append(entry_head, entry_curr);
-            }
-
-        } else {
-            ptr = next_line(ptr);
+            else
+                entry_head = entry_curr;
         }
 
-        if (ptr == NULL)
-            break;
-    }
+    } while ( (ptr = next_line(ptr)) );
 
     free(file_content);
     return entry_head;
@@ -371,20 +351,25 @@ void cursor_visible(int vis) {
 }
 
 
+char* get_key(struct Entry* entry, char* key) {
+    for (size_t i = 0; i < entry->keys_count; ++i)
+        if (strcmp(key, entry->keys[i].key) == 0)
+            return entry->keys[i].val;
+
+    return "";
+}
+
+
 void entry_print(struct Entry* entry, int selected) {
     int allow_color = 1;
 
-    if (entry->type == ET_REG) {
-        struct EntryData_Reg* data = entry->data;
-
-        if (data->colormode == CM_SELECTED && !selected)
-            allow_color = 0;
-    }
+    if (entry->type == ET_REG && strcmp(get_key(entry, "colormode"), "selected") == 0)
+        allow_color = selected;
 
     printf("%s%s%s%s%s%s       ",   entry->type == ET_HEADER ? "\033[4m" : "",
-                                    allow_color ? entry->text->fgcolor : "",
-                                    allow_color ? entry->text->bgcolor : "",
-                                    entry->text->str,
+                                    allow_color ? parse_color(get_key(entry, "fgcolor"), 1) : "",
+                                    allow_color ? parse_color(get_key(entry, "bgcolor"), 0) : "",
+                                    get_key(entry, "str"),
                                     selected ? " (*)" : "",
                                     COLOR_RESET);
 }
@@ -399,11 +384,11 @@ void draw(struct Entry* head) {
     clear_screen();
 
     /* Scrolling */
-    for (int i = 0; (window.ws_row + i) <= g_selected->index; ++i) {
+    for (size_t i = 0; (window.ws_row + i) <= g_selected->index; ++i) {
         if (cursor->next)
             cursor = cursor->next;
     }
-        
+
     x = y = 0;
     while (cursor) {
         if (++y <= window.ws_row)
@@ -451,17 +436,15 @@ int32_t getch(void) {
 /* entry_execute is not the correct name for this, since it does not
    actually do anything to the entry. */
 void execute_entry(struct Entry* entry) {
-    struct EntryData_Reg* data = entry->data;
-
     /* Restore so the application we run looks as it should */
     restore_terminal_mode();
     cursor_visible(1);
 
     clear_screen();
-    system(data->exec);
+    system(get_key(entry, "exec"));
     cursor_visible(0);
 
-    if (data->wait) {
+    if (*get_key(entry, "wait")) {
         set_terminal_mode();
         printf("Press any key to continue...\n");
         getch();
