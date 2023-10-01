@@ -42,6 +42,10 @@
 #define COUNT_OF(arr) (sizeof arr / sizeof *arr)
 
 
+void select_next(void);
+void select_prev(void);
+
+
 enum ColorMode {
     CM_NONE     = 0,
     CM_SELECTED
@@ -198,14 +202,10 @@ char* get_value(char* ptr) {
 
 
 struct Entry* entry_create(enum EntryType type) {
-    struct Entry* new_entry = xmalloc(sizeof *new_entry);;
+    struct Entry* new_entry = xcalloc(1, sizeof *new_entry);;
 
     new_entry->type         = type;
-    new_entry->next         = NULL;
-    new_entry->prev         = NULL;
     new_entry->index        = g_entry_count++;
-    new_entry->keys_count   = 0;
-    new_entry->keys         = NULL;
 
     return new_entry;
 }
@@ -221,13 +221,11 @@ void entry_append(struct Entry* head, struct Entry* node) {
 
 
 void entry_destroy(struct Entry* entry) {
-    if (entry->keys) {
+    if (entry->keys)
         for (size_t i = 0; i < entry->keys_count; ++i)
             free(entry->keys[i].val);
 
-        free(entry->keys);
-    }
-
+    free(entry->keys);
     free(entry);
 }
 
@@ -296,13 +294,12 @@ struct Entry* parse_entries(char* entries_path) {
     do {
         entry_curr = string_startswith(ptr, "[") ? parse_entry(ptr) : NULL;
 
-        if (entry_curr) {
+        if (entry_curr)
             if (entry_head)
                 entry_append(entry_head, entry_curr);
             else
                 entry_head = entry_curr;
-        }
-
+                
     } while ( (ptr = next_line(ptr)) );
 
     free(file_content);
@@ -321,6 +318,8 @@ void select_entry(struct Entry* entry) {
 void select_next(void) {
     if (g_selected->next)
         g_selected = g_selected->next;
+    else if (g_selected->type != ET_REG)
+        select_prev();
 
     if (g_selected->type != ET_REG)
         select_next();
@@ -328,16 +327,13 @@ void select_next(void) {
 
 
 void select_prev(void) {
-    if (g_selected->prev) {
+    if (g_selected->prev)
         g_selected = g_selected->prev;
-
-        if (g_selected->type != ET_REG) {
-            select_prev();
-
-            if (g_selected->type != ET_REG)
-                select_next();
-        }
-    }
+    else if (g_selected->type != ET_REG)
+        select_next();
+   
+    if (g_selected->type != ET_REG)
+        select_prev();
 }
 
 
@@ -384,10 +380,9 @@ void draw(struct Entry* head) {
     clear_screen();
 
     /* Scrolling */
-    for (size_t i = 0; (window.ws_row + i) <= g_selected->index; ++i) {
+    for (size_t i = 0; (window.ws_row + i) <= g_selected->index; ++i)
         if (cursor->next)
             cursor = cursor->next;
-    }
 
     x = y = 0;
     while (cursor) {
@@ -396,9 +391,8 @@ void draw(struct Entry* head) {
         else
             break;
 
-        if (cursor->type == ET_HEADER) {
+        if (cursor->type == ET_HEADER)
             entry_print(cursor, 0);
-        }
 
         if (cursor->type == ET_REG)
             entry_print(cursor, (cursor == g_selected));
@@ -412,6 +406,8 @@ void draw(struct Entry* head) {
 
 void restore_terminal_mode(void) {
     tcsetattr(0, TCSANOW, &g_termios_original);
+    cursor_pos(0, 0);
+    cursor_visible(1);
 }
 
 
@@ -421,9 +417,9 @@ void set_terminal_mode(void) {
     tcgetattr(0, &g_termios_original);
     memcpy(&termios_new, &g_termios_original, sizeof termios_new);
 
-    atexit(restore_terminal_mode);
     cfmakeraw(&termios_new);
     tcsetattr(0, TCSANOW, &termios_new);
+    cursor_visible(0);
 }
 
 
@@ -457,6 +453,7 @@ void execute_entry(struct Entry* entry) {
 
 int main(int argc, char** argv) {
     struct Entry* head;
+    int32_t ch;
 
     if (argc > 1)
         head = parse_entries(argv[1]);
@@ -465,53 +462,26 @@ int main(int argc, char** argv) {
 
     select_entry(head);
     set_terminal_mode();
-    cursor_visible(0);
     clear_screen();
 
     while (1) {
         draw(head);
+        ch = getch();
 
-        switch (getch())
-        {
-            case KEY_K:
-            case KEY_UP:
-                select_prev();
-                break;
-
-            case KEY_J:
-            case KEY_DOWN:
-                select_next();
-                break;
-
-            case KEY_SPACE:
-            case KEY_ENTER:;
-                execute_entry(g_selected);
-                break;
-
-            case KEY_Q:
-            case KEY_CTRLC:
-                goto cleanup;
-
-            case -1:
-                error_exit("Failed to read stdin");
-
-            default:
-                break;
-        }
+        if (ch == KEY_K     || ch == KEY_UP)    select_prev();
+        if (ch == KEY_J     || ch == KEY_DOWN)  select_next();
+        if (ch == KEY_SPACE || ch == KEY_ENTER) execute_entry(g_selected);
+        if (ch == KEY_Q     || ch == KEY_CTRLC) goto cleanup;
     }
 
 
 cleanup:;
-    while (head->next) {
-        head = head->next;
+    while (head->next && (head = head->next))
         entry_destroy(head->prev);
-    }
 
     entry_destroy(head);
 
     restore_terminal_mode();
-    cursor_pos(0, 0);
-    cursor_visible(1);
     clear_screen();
     return EXIT_SUCCESS;
 }
