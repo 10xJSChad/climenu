@@ -28,7 +28,7 @@ Entry format:
     str:     Specifies the text to display for the header or button.
     fgcolor: (Optional) foreground color. [Values: black, blue, cyan, green, magenta, red, white, yellow]
     bgcolor: (Optional) background color. [Values: black, blue, cyan, green, magenta, red, white, yellow]
-    execstr: (Optional) Execute the entry string and display the result [Values: true]
+    runstr:  (Optional) Execute the entry string and display the result [Values: true]
 
   Entry:
     exec:      Specifies the shell command to execute when the button is pressed.
