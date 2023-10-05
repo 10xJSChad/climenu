@@ -94,7 +94,7 @@ struct EntryKey g_parameter_keys[] = {
     PROPERTY("colormode",   KT_STR),
     PROPERTY("wait",        KT_STR),
     PROPERTY("exit",        KT_STR),
-    PROPERTY("execstr",      KT_STR)
+    PROPERTY("runstr",      KT_STR)
 };
 
 struct Entry*  g_selected    = NULL;
@@ -413,7 +413,7 @@ void entry_print(struct Entry* entry, int selected) {
         entry->type == ET_HEADER ? "\033[4m" : "",
         allow_color ? parse_color(get_key(entry, "fgcolor"), 1) : "",
         allow_color ? parse_color(get_key(entry, "bgcolor"), 0) : "",
-        *get_key(entry, "execstr") ? entry_str = cmd_output(get_key(entry, "str")) : get_key(entry, "str"),
+        *get_key(entry, "runstr") ? entry_str = cmd_output(get_key(entry, "str")) : get_key(entry, "str"),
         selected ? " (*)" : "",
         COLOR_RESET);
 
