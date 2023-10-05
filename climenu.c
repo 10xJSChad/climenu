@@ -39,7 +39,7 @@
 #define KEY_Q       0x71
 #define KEY_CTRLC   0x03
 
-#define PROPERTY(key_str, data_type) {.key = key_str, .type = data_type, .val = NULL }
+#define PROPERTY(key_str) {.key = key_str, .val = NULL }
 #define COUNT_OF(arr) (sizeof arr / sizeof *arr)
 
 
@@ -61,14 +61,6 @@ enum EntryType {
 };
 
 
-enum KeyType {
-    KT_NONE = 0,
-    KT_STR,
-    KT_INT,
-    KT_BOOL
-};
-
-
 struct EntryKey {
     char* key;
     char* val;
@@ -87,15 +79,16 @@ struct Entry {
 
 
 struct EntryKey g_parameter_keys[] = {
-    PROPERTY("str",         KT_STR),
-    PROPERTY("fgcolor",     KT_STR),
-    PROPERTY("bgcolor",     KT_STR),
-    PROPERTY("exec",        KT_STR),
-    PROPERTY("colormode",   KT_STR),
-    PROPERTY("wait",        KT_STR),
-    PROPERTY("exit",        KT_STR),
-    PROPERTY("runstr",      KT_STR)
+    PROPERTY("str"),
+    PROPERTY("fgcolor"),
+    PROPERTY("bgcolor"),
+    PROPERTY("exec"),
+    PROPERTY("colormode"),
+    PROPERTY("wait"),
+    PROPERTY("exit"),
+    PROPERTY("runstr")
 };
+
 
 struct Entry*  g_selected    = NULL;
 struct Entry*  g_head        = NULL;
@@ -498,21 +491,19 @@ void execute_entry(struct Entry* entry) {
 
     clear_screen();
     system(get_key(entry, "exec"));
+
     cursor_visible(0);
+    set_terminal_mode();
 
-    if (*get_key(entry, "wait")) {
-        set_terminal_mode();
+    if (*get_key(entry, "wait"))
         getch();
-    } else {
-        set_terminal_mode();
-    }
 
-    if (*get_key(entry, "exit")) {
+    if (*get_key(entry, "exit"))
         clean_exit();
-    }
 
     clear_screen();
 }
+
 
 
 void clean_exit(void) {
