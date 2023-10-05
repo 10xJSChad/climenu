@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <time.h>
 #include <termios.h>
 #include <stdint.h>
 
@@ -44,6 +45,7 @@
 
 void select_next(void);
 void select_prev(void);
+void clean_exit(void);
 
 
 enum ColorMode {
@@ -84,16 +86,19 @@ struct Entry {
 };
 
 
-struct EntryKey g_parameter_keys[] = { 
+struct EntryKey g_parameter_keys[] = {
     PROPERTY("str",         KT_STR),
     PROPERTY("fgcolor",     KT_STR),
     PROPERTY("bgcolor",     KT_STR),
     PROPERTY("exec",        KT_STR),
     PROPERTY("colormode",   KT_STR),
-    PROPERTY("wait",        KT_STR)
+    PROPERTY("wait",        KT_STR),
+    PROPERTY("exit",        KT_STR),
+    PROPERTY("execstr",      KT_STR)
 };
 
 struct Entry*  g_selected    = NULL;
+struct Entry*  g_head        = NULL;
 size_t         g_entry_count = 0;
 struct termios g_termios_original;
 
@@ -106,21 +111,36 @@ void error_exit(char* msg) {
 
 void* xmalloc(size_t size) {
     void* ptr = malloc(size);
-    
+
     if (ptr == NULL)
         error_exit("malloc failed");
-    
+
     return ptr;
 }
 
 
 void* xcalloc(size_t n, size_t size) {
     void* ptr = calloc(n, size);
-    
+
     if (ptr == NULL)
         error_exit("calloc failed");
-    
+
     return ptr;
+}
+
+
+int sleep_ms(long ms) {
+    struct timespec ts;
+    int res;
+
+    ts.tv_sec = ms / 1000;
+    ts.tv_nsec = (ms % 1000) * 1000000;
+
+    do {
+        res = nanosleep(&ts, &ts);
+    } while (res);
+
+    return res;
 }
 
 
@@ -249,8 +269,8 @@ char* parse_color(char* color, int fg) {
 
 void entry_copy_keys(struct Entry* entry) {
     int j = 0;
-    entry->keys = xmalloc(entry->keys_count * sizeof *entry->keys);  
-    
+    entry->keys = xmalloc(entry->keys_count * sizeof *entry->keys);
+
     for (size_t i = 0; i < COUNT_OF(g_parameter_keys); ++i) {
         if (g_parameter_keys[i].val) {
             entry->keys[j++] = g_parameter_keys[i];
@@ -262,20 +282,20 @@ void entry_copy_keys(struct Entry* entry) {
 
 struct Entry* parse_entry(char* ptr) {
     struct Entry* entry;
-    
+
     if      (string_startswith(ptr, "[Entry]"))  entry = entry_create(ET_REG);
     else if (string_startswith(ptr, "[Header]")) entry = entry_create(ET_HEADER);
     else return NULL;
-    
+
     while ( (ptr = next_line(ptr)) ) {
         if (string_startswith(ptr, "["))
             break;
-            
+
         for (size_t i = 0; i < COUNT_OF(g_parameter_keys); ++i) {
             if (string_startswith(ptr, g_parameter_keys[i].key)) {
                 g_parameter_keys[i].val = get_value(ptr);
                 ++entry->keys_count;
-            }    
+            }
         }
     }
 
@@ -290,7 +310,7 @@ struct Entry* parse_entries(char* entries_path) {
 
     char* file_content = read_file(entries_path);
     char* ptr          = file_content;
-    
+
     do {
         entry_curr = string_startswith(ptr, "[") ? parse_entry(ptr) : NULL;
 
@@ -299,7 +319,7 @@ struct Entry* parse_entries(char* entries_path) {
                 entry_append(entry_head, entry_curr);
             else
                 entry_head = entry_curr;
-                
+
     } while ( (ptr = next_line(ptr)) );
 
     free(file_content);
@@ -331,7 +351,7 @@ void select_prev(void) {
         g_selected = g_selected->prev;
     else if (g_selected->type != ET_REG)
         select_next();
-   
+
     if (g_selected->type != ET_REG)
         select_prev();
 }
@@ -356,18 +376,48 @@ char* get_key(struct Entry* entry, char* key) {
 }
 
 
+char* cmd_output(char* cmd) {
+    FILE *file_ptr;
+    char buf[BUFSIZ];
+
+    file_ptr = popen(cmd, "r");
+
+    if (file_ptr == NULL) {
+        perror("popen");
+        exit(1);
+    }
+
+    while (fgets(buf, sizeof(buf) - 1, file_ptr) != NULL) {
+        char* ptr = buf;
+
+        while (*ptr && *ptr != '\n')
+            ++ptr;
+
+        if (*ptr == '\n')
+            *ptr = '\0';
+    }
+
+    pclose(file_ptr);
+    return string_dup(buf);
+}
+
+
 void entry_print(struct Entry* entry, int selected) {
+    char* entry_str = NULL;
     int allow_color = 1;
 
     if (entry->type == ET_REG && strcmp(get_key(entry, "colormode"), "selected") == 0)
         allow_color = selected;
 
-    printf("%s%s%s%s%s%s       ",   entry->type == ET_HEADER ? "\033[4m" : "",
-                                    allow_color ? parse_color(get_key(entry, "fgcolor"), 1) : "",
-                                    allow_color ? parse_color(get_key(entry, "bgcolor"), 0) : "",
-                                    get_key(entry, "str"),
-                                    selected ? " (*)" : "",
-                                    COLOR_RESET);
+    printf("%s%s%s%s%s%s       ",
+        entry->type == ET_HEADER ? "\033[4m" : "",
+        allow_color ? parse_color(get_key(entry, "fgcolor"), 1) : "",
+        allow_color ? parse_color(get_key(entry, "bgcolor"), 0) : "",
+        *get_key(entry, "execstr") ? entry_str = cmd_output(get_key(entry, "str")) : get_key(entry, "str"),
+        selected ? " (*)" : "",
+        COLOR_RESET);
+
+    free(entry_str);
 }
 
 
@@ -377,7 +427,6 @@ void draw(struct Entry* head) {
     int x, y;
 
     ioctl(0, TIOCGWINSZ, &window);
-    clear_screen();
 
     /* Scrolling */
     for (size_t i = 0; (window.ws_row + i) <= g_selected->index; ++i)
@@ -423,6 +472,17 @@ void set_terminal_mode(void) {
 }
 
 
+int key_pressed(void) {
+    fd_set fds;
+    struct timeval tv = { 0L, 0L };
+
+    FD_ZERO(&fds);
+    FD_SET(0, &fds);
+
+    return select(1, &fds, NULL, NULL, &tv) > 0;
+}
+
+
 int32_t getch(void) {
     char buf[4] = {0};
     return (read(0, buf, 4) != -1) ? *(int32_t*) buf : -1;
@@ -442,46 +502,80 @@ void execute_entry(struct Entry* entry) {
 
     if (*get_key(entry, "wait")) {
         set_terminal_mode();
-        printf("Press any key to continue...\n");
         getch();
     } else {
         set_terminal_mode();
     }
 
+    if (*get_key(entry, "exit")) {
+        clean_exit();
+    }
+
     clear_screen();
 }
 
+
+void clean_exit(void) {
+    while (g_head->next && (g_head = g_head->next))
+        entry_destroy(g_head->prev);
+
+    entry_destroy(g_head);
+
+    restore_terminal_mode();
+    clear_screen();
+
+    exit(EXIT_SUCCESS);
+}
+
+
 int main(int argc, char** argv) {
-    struct Entry* head;
+    int refresh     = 0;
+    int time_passed = 0;
     int32_t ch;
 
-    if (argc > 1)
-        head = parse_entries(argv[1]);
-    else
+    if (argc > 1) {
+        g_head = parse_entries(argv[1]);
+        if (argc > 2)
+            refresh = atoi(argv[2]);
+    } else {
         error_exit("No entries file provided");
+    }
 
-    select_entry(head);
+    select_entry(g_head);
     set_terminal_mode();
     clear_screen();
 
     while (1) {
-        draw(head);
-        ch = getch();
+        if (refresh) {
+            draw(g_head);
 
+            while (time_passed < refresh * 1000) {
+                sleep_ms(10);
+                time_passed += 10;
+
+                if (key_pressed()) {
+                    draw(g_head);
+                    ch = getch();
+                    goto handle_input;
+                } else {
+                    continue;
+                }
+            }
+
+            time_passed = 0;
+            continue;
+        } else {
+            draw(g_head);
+            ch = getch();
+        }
+
+
+handle_input:
         if (ch == KEY_K     || ch == KEY_UP)    select_prev();
         if (ch == KEY_J     || ch == KEY_DOWN)  select_next();
         if (ch == KEY_SPACE || ch == KEY_ENTER) execute_entry(g_selected);
-        if (ch == KEY_Q     || ch == KEY_CTRLC) goto cleanup;
+        if (ch == KEY_Q     || ch == KEY_CTRLC) clean_exit();
     }
 
-
-cleanup:;
-    while (head->next && (head = head->next))
-        entry_destroy(head->prev);
-
-    entry_destroy(head);
-
-    restore_terminal_mode();
-    clear_screen();
     return EXIT_SUCCESS;
 }
