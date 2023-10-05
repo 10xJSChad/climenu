@@ -15,7 +15,7 @@ https://github.com/10xJSChad/climenu/assets/48174610/3fdb2471-ec67-4a28-b369-415
 
 ```
 Usage:
-  climenu [ENTRIES FILE]
+  climenu <ENTRIES FILE> [UPDATE INTERVAL (seconds)]
   An example of what an entries file should look like can be found in 'example.conf'
 
 Entry format:
@@ -28,19 +28,20 @@ Entry format:
     str:     Specifies the text to display for the header or button.
     fgcolor: (Optional) foreground color. [Values: black, blue, cyan, green, magenta, red, white, yellow]
     bgcolor: (Optional) background color. [Values: black, blue, cyan, green, magenta, red, white, yellow]
+    execstr: (Optional) Execute the entry string and display the result [Values: true]
 
   Entry:
     exec:      Specifies the shell command to execute when the button is pressed.
-    wait:      (Optional) If set to true, the program waits for a key press after executing the command.
+    exit:      (Optional) Exit after executing an entry command. [Values: true]
+    wait:      (Optional) Waits for a key press after executing the command. [Values: true]
     colormode: (Optional) When the entry should be displayed in color. [Values: selected]
 ```
 
 
 ### Roadmap:
   - [x]  Scrolling, currently it does not scroll and thus you can't *really* have a whole lot of entries.
-  - [ ]  More dynamic entry text, would be nice if an entry could conditionally change its text and color.
-  - [ ]  Not a feature, but the parser isn't great to look at, should be rewritten for clarity.
-
+  - [x]  More dynamic entry text, would be nice if an entry could conditionally change its text and color.
+  - [x]  Not a feature, but the parser isn't great to look at, should be rewritten for clarity.
 
 ### Contribution Guidelines:
   * Do not refactor unless you're already adding or fixing something. If the code has nothing to do with what you're trying to accomplish, don't refactor it. Do feel free to change anything in the vicinity of the code you *are* working on, though.
