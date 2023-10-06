@@ -1,13 +1,21 @@
 ## climenu
-C application for creating interactive shell menus with custom buttons. Create menus from a text file, navigate using keys, and execute shell commands easily. Useful for simplifying command execution and organization.
+C application for creating interactive shell menus with custom buttons. Menus can be read from config files or stdin, navigate using keys, and execute shell commands easily. Useful for simplifying command execution and organization, but can also be used to quickly create more advanced menu applications.
 
 
-https://github.com/10xJSChad/climenu/assets/48174610/3fdb2471-ec67-4a28-b369-415ae78f04d5
+### Basic example (example.conf):
+
+https://github.com/10xJSChad/climenu/assets/48174610/e9f5be09-ea46-42a6-803d-6b3e71315952
+
+### climenu in a file explorer (explorer.sh):
+
+https://github.com/10xJSChad/climenu/assets/48174610/f4361d28-c396-419e-8892-9184aa2852e9
+
 
 <br>
 
 ### Features:
-  - Incredibly simple config syntax, adding entries is a breeze.
+  - Incredibly simple config syntax, creating entries is a breeze.
+  - Can read entries from stdin, allowing for dynamic generation of menus by external programs.
   - No external dependencies, it'll easily compile on anything that resembles Linux.
   - Runs just fine on any terminal emulator that supports common ANSI escape codes.
 
@@ -15,26 +23,31 @@ https://github.com/10xJSChad/climenu/assets/48174610/3fdb2471-ec67-4a28-b369-415
 
 ```
 Usage:
-  climenu <ENTRIES FILE> [UPDATE INTERVAL (seconds)]
-  An example of what an entries file should look like can be found in 'example.conf'
+ climenu [ENTRIES PATH] [UPDATE INTERVAL]
+ If no entries file is provided, climenu
+ will attempt to read entries from stdin.
 
-Entry format:
-  -Labels-
-  [Header]: Defines a menu header with a text description.
-  [Entry]: Defines a button with a label and a shell command to execute.
-  
-  -Properties-
-  All:
-    str:     Specifies the text to display for the header or button.
-    fgcolor: (Optional) foreground color. [Values: black, blue, cyan, green, magenta, red, white, yellow]
-    bgcolor: (Optional) background color. [Values: black, blue, cyan, green, magenta, red, white, yellow]
-    runstr:  (Optional) Execute the entry string and display the result [Values: true]
+Keys:
+  Navigate: JK, UP/DOWN arrows.
+  Select:   Space, Enter
+  Exit:     CTRL+C, Q
 
-  Entry:
-    exec:      Specifies the shell command to execute when the button is pressed.
-    exit:      (Optional) Exit after executing an entry command. [Values: true]
-    wait:      (Optional) Waits for a key press after executing the command. [Values: true]
-    colormode: (Optional) When the entry should be displayed in color. [Values: selected]
+Entry types:
+ [Header]: Defines a menu header with a text description.
+ [Entry]:  Defines a button with a label and a shell command to execute.
+ 
+Entry properties:
+ [Header] and [Entry]:
+   <str>:   Specifies the text to display for the header or button.
+   fgcolor: foreground color. [black,blue,cyan,green,magenta,red,white,yellow]
+   bgcolor: background color. [black,blue,cyan,green,magenta,red,white,yellow]
+   runstr:  Execute the entry string and display the result [true]
+
+ [Entry]:
+   <exec>:    Specifies the shell command to execute when the button is pressed.
+   exit:      Exit after executing an entry command. [true]
+   wait:      Waits for a key press after executing the command. [true]
+   colormode: When the entry should be displayed in color. [selected]
 ```
 
 
