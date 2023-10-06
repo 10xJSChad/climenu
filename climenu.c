@@ -29,6 +29,8 @@
 #define COLOR_BG_CYAN    "\033[46m"
 #define COLOR_BG_WHITE   "\033[47m"
 
+#define ALLOCSIZ         64
+
 /* Key codes */
 #define KEY_J       0x6A
 #define KEY_K       0x6B
@@ -94,7 +96,7 @@ struct Entry*  g_selected    = NULL;
 struct Entry*  g_head        = NULL;
 size_t         g_entry_count = 0;
 struct termios g_termios_original;
-
+struct winsize g_window;
 
 void error_exit(char* msg) {
     printf("%s\n", msg);
@@ -168,6 +170,37 @@ char* read_file(char* path) {
 
     fread(buf, 1, file_size, file_ptr);
     fclose(file_ptr);
+    return buf;
+}
+
+
+char* read_stdin(void) {
+    char* buf = NULL;
+    char  ch;
+    size_t i, allocated_size;
+
+    i = allocated_size = 0;
+    while ((ch = getchar()) != EOF) {
+        if (i >= allocated_size) {
+            allocated_size += ALLOCSIZ;
+            buf = realloc(buf, allocated_size);
+
+            if (buf == NULL) {
+                perror("realloc");
+                exit(1);
+            }
+        }
+
+        buf[i++] = ch;
+    }
+
+    if (i >= allocated_size)
+        buf = realloc(buf, allocated_size + 1);
+
+    buf[i] = '\0';
+
+    /* Set stdin to tty input */
+    freopen("/dev/tty", "r", stdin);
     return buf;
 }
 
@@ -297,11 +330,9 @@ struct Entry* parse_entry(char* ptr) {
 }
 
 
-struct Entry* parse_entries(char* entries_path) {
+struct Entry* parse_entries(char* file_content) {
     struct Entry* entry_head = NULL;
     struct Entry* entry_curr = NULL;
-
-    char* file_content = read_file(entries_path);
     char* ptr          = file_content;
 
     do {
@@ -402,12 +433,13 @@ void entry_print(struct Entry* entry, int selected) {
     if (entry->type == ET_REG && strcmp(get_key(entry, "colormode"), "selected") == 0)
         allow_color = selected;
 
-    printf("%s%s%s%s%s%s       ",
+    printf("%s%s%s%s%s%-*s",
         entry->type == ET_HEADER ? "\033[4m" : "",
         allow_color ? parse_color(get_key(entry, "fgcolor"), 1) : "",
         allow_color ? parse_color(get_key(entry, "bgcolor"), 0) : "",
         *get_key(entry, "runstr") ? entry_str = cmd_output(get_key(entry, "str")) : get_key(entry, "str"),
         selected ? " (*)" : "",
+        g_window.ws_col,
         COLOR_RESET);
 
     free(entry_str);
@@ -416,19 +448,18 @@ void entry_print(struct Entry* entry, int selected) {
 
 void draw(struct Entry* head) {
     struct Entry* cursor = head;
-    struct winsize window;
     int x, y;
 
-    ioctl(0, TIOCGWINSZ, &window);
+    ioctl(0, TIOCGWINSZ, &g_window);
 
     /* Scrolling */
-    for (size_t i = 0; (window.ws_row + i) <= g_selected->index; ++i)
+    for (size_t i = 0; (g_window.ws_row + i) <= g_selected->index; ++i)
         if (cursor->next)
             cursor = cursor->next;
 
     x = y = 0;
     while (cursor) {
-        if (++y <= window.ws_row)
+        if (++y <= g_window.ws_row)
             cursor_pos(x, y);
         else
             break;
@@ -505,7 +536,6 @@ void execute_entry(struct Entry* entry) {
 }
 
 
-
 void clean_exit(void) {
     while (g_head->next && (g_head = g_head->next))
         entry_destroy(g_head->prev);
@@ -519,17 +549,68 @@ void clean_exit(void) {
 }
 
 
+void print_usage(void) {
+    printf
+    (
+        "Usage:\n"
+        " climenu [ENTRIES PATH] [UPDATE INTERVAL]\n\n"
+        " If no entries file is provided, climenu\n"
+        " will attempt to read entries from stdin.\n\n"
+
+        "Keys:\n"
+        " Navigate: JK, UP/DOWN arrows.\n"
+        " Select:   Space, Enter\n"
+        " Exit:     CTRL+C, Q\n\n"
+
+        "Entry types:\n"
+        " [Header]: Defines a menu header with a text description.\n"
+        " [Entry]:  Defines a button with a label and a shell command to execute.\n\n"
+
+        "Entry properties:\n"
+        " [Header] and [Entry]:\n"
+        "   <str>:   Specifies the text to display for the header or button.\n"
+        "   fgcolor: foreground color. [black,blue,cyan,green,magenta,red,white,yellow]\n"
+        "   bgcolor: background color. [black,blue,cyan,green,magenta,red,white,yellow]\n"
+        "   runstr:  Execute the entry string and display the result [true]\n\n"
+
+        " [Entry]:\n"
+        "   <exec>:    Specifies the shell command to execute when the button is pressed.\n"
+        "   exit:      Exit after executing an entry command. [true]\n"
+        "   wait:      Waits for a key press after executing the command. [true]\n"
+        "   colormode: When the entry should be displayed in color. [selected]\n"
+    );
+}
+
+
 int main(int argc, char** argv) {
     int refresh     = 0;
     int time_passed = 0;
     int32_t ch;
 
-    if (argc > 1) {
-        g_head = parse_entries(argv[1]);
-        if (argc > 2)
-            refresh = atoi(argv[2]);
-    } else {
-        error_exit("No entries file provided");
+    if (argc == 1) {
+        g_head = parse_entries(read_stdin());
+    }
+
+    if (argc == 2) {
+        if (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0) {
+            print_usage();
+            return 0;
+        }
+
+        if ((refresh = atoi(argv[1])) != 0)
+            g_head = parse_entries(read_stdin());
+        else
+            g_head = parse_entries(read_file(argv[1]));
+    }
+
+    if (argc == 3) {
+        g_head = parse_entries(read_file(argv[1]));
+        refresh = atoi(argv[2]);
+    }
+
+    if (g_head == NULL) {
+        print_usage();
+        return 1;
     }
 
     select_entry(g_head);
