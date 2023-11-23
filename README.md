@@ -1,6 +1,6 @@
 ## climenu
 C application for creating interactive text menus with custom buttons. Menus can be read from config files or stdin, navigate using keys, and execute shell commands easily. Useful for simplifying command execution and organization, but can also be used to quickly create more advanced menu applications.<br><br>
-Do not question why it's called **cli**menu when it created tuis.
+Do not question why it's called **cli**menu when it creates tuis.
 
 
 ### Basic example (example.conf):
