@@ -195,11 +195,6 @@ char* read_stdin(void) {
         if (i >= allocated_size) {
             allocated_size += ALLOCSIZ;
             buf = xrealloc(buf, allocated_size);
-
-            if (buf == NULL) {
-                perror("realloc");
-                exit(1);
-            }
         }
 
         buf[i++] = ch;
