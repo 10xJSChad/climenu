@@ -8,7 +8,7 @@
 #include <stdint.h>
 
 
-#define COLOR_DEFAULT ""
+#define COLOR_DEFAULT    ""
 #define COLOR_RESET      "\033[0m"
 
 #define COLOR_FG_BLACK   "\033[30m"
@@ -29,7 +29,7 @@
 #define COLOR_BG_CYAN    "\033[46m"
 #define COLOR_BG_WHITE   "\033[47m"
 
-#define ALLOCSIZ         64
+#define ALLOCSIZ 64
 
 /* Key codes */
 #define KEY_J       0x6A
@@ -98,9 +98,20 @@ size_t         g_entry_count = 0;
 struct termios g_termios_original;
 struct winsize g_window;
 
+
 void error_exit(char* msg) {
     printf("%s\n", msg);
     exit(EXIT_FAILURE);
+}
+
+
+void* xrealloc(void* buf, size_t size) {
+    buf = realloc(buf, size);
+
+    if (buf == NULL)
+        error_exit("realloc failed");
+
+    return buf;
 }
 
 
@@ -183,7 +194,7 @@ char* read_stdin(void) {
     while ((ch = getchar()) != EOF) {
         if (i >= allocated_size) {
             allocated_size += ALLOCSIZ;
-            buf = realloc(buf, allocated_size);
+            buf = xrealloc(buf, allocated_size);
 
             if (buf == NULL) {
                 perror("realloc");
@@ -195,7 +206,7 @@ char* read_stdin(void) {
     }
 
     if (i >= allocated_size)
-        buf = realloc(buf, allocated_size + 1);
+        buf = xrealloc(buf, allocated_size + 1);
 
     buf[i] = '\0';
 
