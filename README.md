@@ -53,9 +53,9 @@ Entry properties:
 
 
 ### Roadmap:
-  - [x]  Scrolling, currently it does not scroll and thus you can't *really* have a whole lot of entries.
-  - [x]  More dynamic entry text, would be nice if an entry could conditionally change its text and color.
-  - [x]  Not a feature, but the parser isn't great to look at, should be rewritten for clarity.
+  - [x]  ~~Scrolling, currently it does not scroll and thus you can't *really* have a whole lot of entries.~~
+  - [x]  ~~More dynamic entry text, would be nice if an entry could conditionally change its text and color.~~
+  - [x]  ~~Not a feature, but the parser isn't great to look at, should be rewritten for clarity.~~
 
 ### Contribution Guidelines:
   * Do not refactor unless you're already adding or fixing something. If the code has nothing to do with what you're trying to accomplish, don't refactor it. Do feel free to change anything in the vicinity of the code you *are* working on, though.
