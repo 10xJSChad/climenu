@@ -2,6 +2,7 @@
 C application for creating interactive text menus with custom buttons. Menus can be read from config files or stdin, navigate using keys, and execute shell commands easily. Useful for simplifying command execution and organization, but can also be used to quickly create more advanced menu applications.<br><br>
 Do not question why it's called **cli**menu when it creates tuis.
 
+If you're looking for something even simpler, I also made [cmenu](https://github.com/10xJSChad/cmenu), which is pretty much just a terminal dmenu clone.
 
 ### Basic example (example.conf):
 
