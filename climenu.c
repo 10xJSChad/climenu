@@ -108,7 +108,7 @@ struct EntryKey g_parameter_keys[] = {
 
 struct Entry* g_selected = NULL;
 struct Entry* g_head = NULL;
-size_t         g_entry_count = 0;
+size_t        g_entry_count = 0;
 
 #ifdef UNIX
 struct termios g_termios_original;
@@ -180,7 +180,12 @@ int sleep_ms(long ms) {
 
 
 void clear_screen(void) {
+#ifdef UNIX
     system("clear");
+#else
+    /* I don't even know if you still need cls, it seemed to work ith clear too. */
+    system("cls");
+#endif
 }
 
 
@@ -556,7 +561,7 @@ int key_pressed(void) {
 }
 
 
-/* Renamed from getch to avoid headaches with windows support */
+/* renamed from getch to avoid headaches with windows support */
 int32_t input_getch(void) {
     char buf[4] = { 0 };
     return (read(0, buf, 4) != -1) ? *(int32_t*)buf : -1;
