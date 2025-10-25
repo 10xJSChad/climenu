@@ -487,13 +487,10 @@ void entry_print(struct Entry* entry, int selected) {
 void draw(struct Entry* head) {
     struct Entry* cursor = head;
     int x, y;
-    int scroll_offset = 0;
 
 #ifdef UNIX
     ioctl(0, TIOCGWINSZ, &g_window);
 #else
-	scroll_offset = -1;
-
     CONSOLE_SCREEN_BUFFER_INFO csbi;
     if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi))
     {
@@ -503,16 +500,13 @@ void draw(struct Entry* head) {
 #endif
 
     /* Scrolling */
-    for (size_t i = 0; (g_window.ws_row + i + scroll_offset) <= g_selected->index; ++i)
+    for (size_t i = 0; (g_window.ws_row + i) <= g_selected->index; ++i)
         if (cursor->next)
             cursor = cursor->next;
 
     x = y = 0;
-    if (g_entry_count >= g_window.ws_row)
-        ++y;
-
     while (cursor) {
-        if (++y <= g_window.ws_row)
+        if (++y <= g_window.ws_row - 1)
             cursor_pos(x, y);
         else
             break;
@@ -738,7 +732,7 @@ int main(int argc, char** argv) {
         }
 
 
-    handle_input:
+handle_input:
         if (ch == KEY_K || ch == KEY_UP)    select_prev();
         if (ch == KEY_J || ch == KEY_DOWN)  select_next();
         if (ch == KEY_SPACE || ch == KEY_ENTER) execute_entry(g_selected);
