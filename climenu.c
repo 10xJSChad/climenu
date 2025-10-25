@@ -1,12 +1,24 @@
+#define _CRT_SECURE_NO_WARNINGS
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <sys/ioctl.h>
 #include <time.h>
-#include <termios.h>
 #include <stdint.h>
 
+#ifndef _WIN32
+#define UNIX
+#else
+#include <windows.h>
+#define popen _popen
+#define pclose _pclose
+#endif
+
+#ifdef UNIX
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <termios.h>
+#endif
 
 #define COLOR_DEFAULT    ""
 #define COLOR_RESET      "\033[0m"
@@ -50,14 +62,16 @@ void select_prev(void);
 void clean_exit(void);
 
 
+/* These used to be CM_X but windows uses those for "color management caps" or something,
+   all I know is that CM_NONE is defined in wingdi.h so I had to rename. */
 enum ColorMode {
-    CM_NONE     = 0,
-    CM_SELECTED
+    COLORMODE_NONE = 0,
+    COLORMODE_SELECTED
 };
 
 
 enum EntryType {
-    ET_NONE     = 0,
+    ET_NONE = 0,
     ET_REG,
     ET_HEADER
 };
@@ -92,12 +106,20 @@ struct EntryKey g_parameter_keys[] = {
 };
 
 
-struct Entry*  g_selected    = NULL;
-struct Entry*  g_head        = NULL;
+struct Entry* g_selected = NULL;
+struct Entry* g_head = NULL;
 size_t         g_entry_count = 0;
-struct termios g_termios_original;
-struct winsize g_window;
 
+#ifdef UNIX
+struct termios g_termios_original;
+#else
+struct winsize {
+    int ws_row;
+	int ws_col;
+};
+#endif
+
+struct winsize g_window;
 
 void error_exit(char* msg) {
     printf("%s\n", msg);
@@ -135,7 +157,9 @@ void* xcalloc(size_t n, size_t size) {
 }
 
 
+/* Is there even a reason to return anything here?, we never use it */
 int sleep_ms(long ms) {
+#ifdef UNIX
     struct timespec ts;
     int res;
 
@@ -147,6 +171,11 @@ int sleep_ms(long ms) {
     } while (res);
 
     return res;
+#else
+    Sleep(ms);
+    /* Gotta return a value for us to never check! */
+	return 0;
+#endif
 }
 
 
@@ -167,9 +196,9 @@ size_t get_filesize(FILE* file_ptr) {
 
 
 char* read_file(char* path) {
-    FILE*  file_ptr;
+    FILE* file_ptr;
     size_t file_size;
-    char*  buf;
+    char* buf;
 
     file_ptr = fopen(path, "r");
 
@@ -205,8 +234,11 @@ char* read_stdin(void) {
 
     buf[i] = '\0';
 
+#ifdef UNIX
     /* Set stdin to tty input */
     freopen("/dev/tty", "r", stdin);
+#endif
+
     return buf;
 }
 
@@ -241,7 +273,7 @@ char* next_line(char* ptr) {
 
 
 char* get_value(char* ptr) {
-    char buf[BUFSIZ] = {0};
+    char buf[BUFSIZ] = { 0 };
 
     while (*(ptr++) && *(ptr - 1) != '=')
         ;
@@ -254,10 +286,10 @@ char* get_value(char* ptr) {
 
 
 struct Entry* entry_create(enum EntryType type) {
-    struct Entry* new_entry = xcalloc(1, sizeof *new_entry);;
+    struct Entry* new_entry = xcalloc(1, sizeof * new_entry);;
 
-    new_entry->type         = type;
-    new_entry->index        = g_entry_count++;
+    new_entry->type = type;
+    new_entry->index = g_entry_count++;
 
     return new_entry;
 }
@@ -286,14 +318,14 @@ char* parse_color(char* color, int fg) {
     if (color == NULL)
         return NULL;
 
-    if (strcmp(color, "black")   == 0)  return fg ? COLOR_FG_BLACK   : COLOR_BG_BLACK;
-    if (strcmp(color, "blue")    == 0)  return fg ? COLOR_FG_BLUE    : COLOR_BG_BLUE;
-    if (strcmp(color, "cyan")    == 0)  return fg ? COLOR_FG_CYAN    : COLOR_BG_CYAN;
-    if (strcmp(color, "green")   == 0)  return fg ? COLOR_FG_GREEN   : COLOR_BG_GREEN;
+    if (strcmp(color, "black") == 0)  return fg ? COLOR_FG_BLACK : COLOR_BG_BLACK;
+    if (strcmp(color, "blue") == 0)  return fg ? COLOR_FG_BLUE : COLOR_BG_BLUE;
+    if (strcmp(color, "cyan") == 0)  return fg ? COLOR_FG_CYAN : COLOR_BG_CYAN;
+    if (strcmp(color, "green") == 0)  return fg ? COLOR_FG_GREEN : COLOR_BG_GREEN;
     if (strcmp(color, "magenta") == 0)  return fg ? COLOR_FG_MAGENTA : COLOR_BG_MAGENTA;
-    if (strcmp(color, "red")     == 0)  return fg ? COLOR_FG_RED     : COLOR_BG_RED;
-    if (strcmp(color, "white")   == 0)  return fg ? COLOR_FG_WHITE   : COLOR_BG_WHITE;
-    if (strcmp(color, "yellow")  == 0)  return fg ? COLOR_FG_YELLOW  : COLOR_BG_YELLOW;
+    if (strcmp(color, "red") == 0)  return fg ? COLOR_FG_RED : COLOR_BG_RED;
+    if (strcmp(color, "white") == 0)  return fg ? COLOR_FG_WHITE : COLOR_BG_WHITE;
+    if (strcmp(color, "yellow") == 0)  return fg ? COLOR_FG_YELLOW : COLOR_BG_YELLOW;
 
     return "";
 }
@@ -301,7 +333,7 @@ char* parse_color(char* color, int fg) {
 
 void entry_copy_keys(struct Entry* entry) {
     int j = 0;
-    entry->keys = xmalloc(entry->keys_count * sizeof *entry->keys);
+    entry->keys = xmalloc(entry->keys_count * sizeof * entry->keys);
 
     for (size_t i = 0; i < COUNT_OF(g_parameter_keys); ++i) {
         if (g_parameter_keys[i].val) {
@@ -315,11 +347,11 @@ void entry_copy_keys(struct Entry* entry) {
 struct Entry* parse_entry(char* ptr) {
     struct Entry* entry;
 
-    if      (string_startswith(ptr, "[Entry]"))  entry = entry_create(ET_REG);
+    if (string_startswith(ptr, "[Entry]"))  entry = entry_create(ET_REG);
     else if (string_startswith(ptr, "[Header]")) entry = entry_create(ET_HEADER);
     else return NULL;
 
-    while ( (ptr = next_line(ptr)) ) {
+    while ((ptr = next_line(ptr))) {
         if (string_startswith(ptr, "["))
             break;
 
@@ -339,7 +371,7 @@ struct Entry* parse_entry(char* ptr) {
 struct Entry* parse_entries(char* file_content) {
     struct Entry* entry_head = NULL;
     struct Entry* entry_curr = NULL;
-    char* ptr          = file_content;
+    char* ptr = file_content;
 
     do {
         entry_curr = string_startswith(ptr, "[") ? parse_entry(ptr) : NULL;
@@ -350,7 +382,7 @@ struct Entry* parse_entries(char* file_content) {
             else
                 entry_head = entry_curr;
 
-    } while ( (ptr = next_line(ptr)) );
+    } while ((ptr = next_line(ptr)));
 
     free(file_content);
     return entry_head;
@@ -407,7 +439,7 @@ char* get_key(struct Entry* entry, char* key) {
 
 
 char* cmd_output(char* cmd) {
-    FILE *file_ptr;
+    FILE* file_ptr;
     char buf[BUFSIZ];
 
     file_ptr = popen(cmd, "r");
@@ -455,8 +487,16 @@ void entry_print(struct Entry* entry, int selected) {
 void draw(struct Entry* head) {
     struct Entry* cursor = head;
     int x, y;
-
+#ifdef UNIX
     ioctl(0, TIOCGWINSZ, &g_window);
+#else
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi))
+    {
+        g_window.ws_row = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+        g_window.ws_col = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+    }
+#endif
 
     /* Scrolling */
     for (size_t i = 0; (g_window.ws_row + i) <= g_selected->index; ++i)
@@ -479,10 +519,13 @@ void draw(struct Entry* head) {
         cursor = cursor->next;
     }
 
+#ifdef UNIX
     fflush(stdout);
+#endif
 }
 
 
+#ifdef UNIX
 void restore_terminal_mode(void) {
     tcsetattr(0, TCSANOW, &g_termios_original);
     cursor_pos(0, 0);
@@ -513,10 +556,50 @@ int key_pressed(void) {
 }
 
 
-int32_t getch(void) {
-    char buf[4] = {0};
-    return (read(0, buf, 4) != -1) ? *(int32_t*) buf : -1;
+/* Renamed from getch to avoid headaches with windows support */
+int32_t input_getch(void) {
+    char buf[4] = { 0 };
+    return (read(0, buf, 4) != -1) ? *(int32_t*)buf : -1;
 }
+
+#else
+
+int32_t input_getch(void) {
+    int ch = getch();
+
+    /* Handle arrow keys */
+    if (ch == 0 || ch == 0xE0) {
+        switch (getch()) {
+        case 72:
+            ch = KEY_UP;
+            break;
+        case 80:
+            ch = KEY_DOWN;
+            break;
+        default:
+            break;
+        }
+    }
+
+    return ch;
+}
+
+
+void restore_terminal_mode(void) {
+    cursor_visible(1);
+}
+
+
+void set_terminal_mode(void) {
+    cursor_visible(0);
+}
+
+
+int key_pressed(void) {
+    return kbhit();
+}
+
+#endif
 
 
 /* entry_execute is not the correct name for this, since it does not
@@ -533,7 +616,7 @@ void execute_entry(struct Entry* entry) {
     set_terminal_mode();
 
     if (*get_key(entry, "wait"))
-        getch();
+        input_getch();
 
     if (*get_key(entry, "exit"))
         clean_exit();
@@ -589,7 +672,7 @@ void print_usage(void) {
 
 
 int main(int argc, char** argv) {
-    int refresh     = 0;
+    int refresh = 0;
     int time_passed = 0;
     int32_t ch;
 
@@ -633,26 +716,28 @@ int main(int argc, char** argv) {
 
                 if (key_pressed()) {
                     draw(g_head);
-                    ch = getch();
+                    ch = input_getch();
                     goto handle_input;
-                } else {
+                }
+                else {
                     continue;
                 }
             }
 
             time_passed = 0;
             continue;
-        } else {
+        }
+        else {
             draw(g_head);
-            ch = getch();
+            ch = input_getch();
         }
 
 
-handle_input:
-        if (ch == KEY_K     || ch == KEY_UP)    select_prev();
-        if (ch == KEY_J     || ch == KEY_DOWN)  select_next();
+    handle_input:
+        if (ch == KEY_K || ch == KEY_UP)    select_prev();
+        if (ch == KEY_J || ch == KEY_DOWN)  select_next();
         if (ch == KEY_SPACE || ch == KEY_ENTER) execute_entry(g_selected);
-        if (ch == KEY_Q     || ch == KEY_CTRLC) clean_exit();
+        if (ch == KEY_Q || ch == KEY_CTRLC) clean_exit();
     }
 
     return EXIT_SUCCESS;
