@@ -509,6 +509,9 @@ void draw(struct Entry* head) {
             cursor = cursor->next;
 
     x = y = 0;
+    if (g_entry_count >= g_window.ws_row)
+        ++y;
+
     while (cursor) {
         if (++y <= g_window.ws_row)
             cursor_pos(x, y);
