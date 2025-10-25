@@ -115,7 +115,7 @@ struct termios g_termios_original;
 #else
 struct winsize {
     int ws_row;
-	int ws_col;
+    int ws_col;
 };
 #endif
 
@@ -157,8 +157,7 @@ void* xcalloc(size_t n, size_t size) {
 }
 
 
-/* Is there even a reason to return anything here?, we never use it */
-int sleep_ms(long ms) {
+void sleep_ms(long ms) {
 #ifdef UNIX
     struct timespec ts;
     int res;
@@ -169,12 +168,8 @@ int sleep_ms(long ms) {
     do {
         res = nanosleep(&ts, &ts);
     } while (res);
-
-    return res;
 #else
     Sleep(ms);
-    /* Gotta return a value for us to never check! */
-	return 0;
 #endif
 }
 
@@ -492,19 +487,23 @@ void entry_print(struct Entry* entry, int selected) {
 void draw(struct Entry* head) {
     struct Entry* cursor = head;
     int x, y;
+    int scroll_offset = 0;
+
 #ifdef UNIX
     ioctl(0, TIOCGWINSZ, &g_window);
 #else
+	scroll_offset = -1;
+
     CONSOLE_SCREEN_BUFFER_INFO csbi;
     if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi))
     {
-        g_window.ws_row = csbi.srWindow.Right - csbi.srWindow.Left + 1;
-        g_window.ws_col = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+        g_window.ws_col = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+        g_window.ws_row = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
     }
 #endif
 
     /* Scrolling */
-    for (size_t i = 0; (g_window.ws_row + i) <= g_selected->index; ++i)
+    for (size_t i = 0; (g_window.ws_row + i + scroll_offset) <= g_selected->index; ++i)
         if (cursor->next)
             cursor = cursor->next;
 
@@ -527,9 +526,7 @@ void draw(struct Entry* head) {
         cursor = cursor->next;
     }
 
-#ifdef UNIX
     fflush(stdout);
-#endif
 }
 
 
@@ -741,7 +738,7 @@ int main(int argc, char** argv) {
         }
 
 
-handle_input:
+    handle_input:
         if (ch == KEY_K || ch == KEY_UP)    select_prev();
         if (ch == KEY_J || ch == KEY_DOWN)  select_next();
         if (ch == KEY_SPACE || ch == KEY_ENTER) execute_entry(g_selected);
