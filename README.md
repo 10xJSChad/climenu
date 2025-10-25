@@ -83,5 +83,7 @@ A Windows release is provided, *nix users will have to compile it themselves.
 The Windows and *nix versions of ```climenu``` will behave differently at times, most notably when piping *to* ```climenu```.
 I'd like them to behave identically, but I'm not very familiar with Windows TUI stuff, so that'll have to wait.
 For now though, in most circumstances it behaves just as expected.
+
+### The example configs are not intended for Windows! They're full of *nix stuff, expect them to be wonky. 
   
 
