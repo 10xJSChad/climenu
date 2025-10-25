@@ -733,7 +733,7 @@ int main(int argc, char** argv) {
         }
 
 
-    handle_input:
+handle_input:
         if (ch == KEY_K || ch == KEY_UP)    select_prev();
         if (ch == KEY_J || ch == KEY_DOWN)  select_next();
         if (ch == KEY_SPACE || ch == KEY_ENTER) execute_entry(g_selected);
