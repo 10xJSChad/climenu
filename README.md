@@ -2,7 +2,7 @@
 C application for creating interactive text menus with custom buttons. Menus can be read from config files or stdin, navigate using keys, and execute shell commands easily. Useful for simplifying command execution and organization, but can also be used to quickly create more advanced menu applications.<br><br>
 Do not question why it's called **cli**menu when it creates tuis.
 
-If you're looking for something even simpler, I also made [cmenu](https://github.com/10xJSChad/cmenu), which is pretty much just a terminal dmenu clone.
+If you're looking for something even simpler, I also made [cmenu](https://github.com/10xJSChad/cmenu), which is pretty much just a terminal dmenu clone. (cmenu does not have Windows support.)
 
 ### Basic example (example.conf):
 
@@ -74,3 +74,20 @@ Requirements:
 Building:
   cc climenu.c
 ```
+
+### ...alternatively, if you want to use the experimental Windows version.
+
+```
+Requirements:
+  Windows
+
+Building:
+  Honestly I just compiled it in VS2022, I don't know the command for this, definitely MSVC though.
+```
+
+A Windows release is provided, *nix users will have to compile it themselves.
+The Windows and *nix versions of ```climenu``` will behave differently at times, most notably when piping *to* ```climenu```.
+I'd like them to behave identically, but I'm not very familiar with Windows TUI stuff, so that'll have to wait.
+For now though, in most circumstances it behaves just as expected.
+  
+
