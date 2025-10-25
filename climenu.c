@@ -561,7 +561,7 @@ int key_pressed(void) {
 }
 
 
-/* renamed from getch to avoid headaches with windows support */
+/* Renamed from getch to avoid headaches with windows support */
 int32_t input_getch(void) {
     char buf[4] = { 0 };
     return (read(0, buf, 4) != -1) ? *(int32_t*)buf : -1;
