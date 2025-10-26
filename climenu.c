@@ -178,7 +178,7 @@ void clear_screen(void) {
 #ifdef UNIX
     system("clear");
 #else
-    /* I don't even know if you still need cls, it seemed to work ith clear too. */
+    /* I don't even know if you still need cls, it seemed to work with clear too. */
     system("cls");
 #endif
 }
