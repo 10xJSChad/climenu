@@ -238,7 +238,7 @@ char* read_stdin(void) {
     /* Set stdin to tty input */
     freopen("/dev/tty", "r", stdin);
 #else
-	/* Same as above but for Windows */
+    /* Same as above but for Windows */
     freopen("CONIN$", "r", stdin);
 #endif
 
@@ -321,14 +321,14 @@ char* parse_color(char* color, int fg) {
     if (color == NULL)
         return NULL;
 
-    if (strcmp(color, "black") == 0)  return fg ? COLOR_FG_BLACK : COLOR_BG_BLACK;
-    if (strcmp(color, "blue") == 0)  return fg ? COLOR_FG_BLUE : COLOR_BG_BLUE;
-    if (strcmp(color, "cyan") == 0)  return fg ? COLOR_FG_CYAN : COLOR_BG_CYAN;
-    if (strcmp(color, "green") == 0)  return fg ? COLOR_FG_GREEN : COLOR_BG_GREEN;
+    if (strcmp(color, "black") == 0)    return fg ? COLOR_FG_BLACK   : COLOR_BG_BLACK;
+    if (strcmp(color, "blue") == 0)     return fg ? COLOR_FG_BLUE    : COLOR_BG_BLUE;
+    if (strcmp(color, "cyan") == 0)     return fg ? COLOR_FG_CYAN    : COLOR_BG_CYAN;
+    if (strcmp(color, "green") == 0)    return fg ? COLOR_FG_GREEN   : COLOR_BG_GREEN;
     if (strcmp(color, "magenta") == 0)  return fg ? COLOR_FG_MAGENTA : COLOR_BG_MAGENTA;
-    if (strcmp(color, "red") == 0)  return fg ? COLOR_FG_RED : COLOR_BG_RED;
-    if (strcmp(color, "white") == 0)  return fg ? COLOR_FG_WHITE : COLOR_BG_WHITE;
-    if (strcmp(color, "yellow") == 0)  return fg ? COLOR_FG_YELLOW : COLOR_BG_YELLOW;
+    if (strcmp(color, "red") == 0)      return fg ? COLOR_FG_RED     : COLOR_BG_RED;
+    if (strcmp(color, "white") == 0)    return fg ? COLOR_FG_WHITE   : COLOR_BG_WHITE;
+    if (strcmp(color, "yellow") == 0)   return fg ? COLOR_FG_YELLOW  : COLOR_BG_YELLOW;
 
     return "";
 }
@@ -677,9 +677,8 @@ int main(int argc, char** argv) {
     int time_passed = 0;
     int32_t ch;
 
-    if (argc == 1) {
+    if (argc == 1)
         g_head = parse_entries(read_stdin());
-    }
 
     if (argc == 2) {
         if (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0) {
@@ -734,11 +733,11 @@ int main(int argc, char** argv) {
         }
 
 
-handle_input:
-        if (ch == KEY_K || ch == KEY_UP)    select_prev();
-        if (ch == KEY_J || ch == KEY_DOWN)  select_next();
+ handle_input:
         if (ch == KEY_SPACE || ch == KEY_ENTER) execute_entry(g_selected);
-        if (ch == KEY_Q || ch == KEY_CTRLC) clean_exit();
+        if (ch == KEY_K || ch == KEY_UP)        select_prev();
+        if (ch == KEY_J || ch == KEY_DOWN)      select_next();
+        if (ch == KEY_Q || ch == KEY_CTRLC)     clean_exit();
     }
 
     return EXIT_SUCCESS;
