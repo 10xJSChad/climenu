@@ -237,6 +237,9 @@ char* read_stdin(void) {
 #ifdef UNIX
     /* Set stdin to tty input */
     freopen("/dev/tty", "r", stdin);
+#else
+	/* Same as above but for Windows */
+    freopen("CONIN$", "r", stdin);
 #endif
 
     return buf;
