@@ -492,8 +492,7 @@ void draw(struct Entry* head) {
     ioctl(0, TIOCGWINSZ, &g_window);
 #else
     CONSOLE_SCREEN_BUFFER_INFO csbi;
-    if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi))
-    {
+    if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi)) {
         g_window.ws_col = csbi.srWindow.Right - csbi.srWindow.Left + 1;
         g_window.ws_row = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
     }
