@@ -108,6 +108,7 @@ struct EntryKey g_parameter_keys[] = {
 
 struct Entry* g_selected = NULL;
 struct Entry* g_head = NULL;
+struct Entry* g_tail = NULL;
 size_t        g_entry_count = 0;
 
 #ifdef UNIX
@@ -219,10 +220,14 @@ char* read_stdin(void) {
     char  ch;
     size_t i, allocated_size;
 
-    i = allocated_size = 0;
+    /* Start with a reasonable size and double when needed */
+    i = 0;
+    allocated_size = ALLOCSIZ * 4; /* Start with 256 bytes */
+    buf = xmalloc(allocated_size);
+    
     while ((ch = getchar()) != EOF) {
         if (i >= allocated_size) {
-            allocated_size += ALLOCSIZ;
+            allocated_size *= 2; /* Double the size */
             buf = xrealloc(buf, allocated_size);
         }
 
@@ -247,14 +252,12 @@ char* read_stdin(void) {
 
 
 int string_startswith(char* a, char* b) {
-    while (*a) {
-        if (*b == '\0')
-            return 1;
-
-        if (*(a++) != *(b++))
+    while (*b) {
+        if (*a != *b)
             return 0;
+        a++;
+        b++;
     }
-
     return 1;
 }
 
@@ -298,12 +301,14 @@ struct Entry* entry_create(enum EntryType type) {
 }
 
 
-void entry_append(struct Entry* head, struct Entry* node) {
-    while (head->next)
-        head = head->next;
-
-    head->next = node;
-    node->prev = head;
+void entry_append(struct Entry* node) {
+    if (g_tail) {
+        g_tail->next = node;
+        node->prev = g_tail;
+        g_tail = node;
+    } else {
+        g_head = g_tail = node;
+    }
 }
 
 
@@ -318,19 +323,36 @@ void entry_destroy(struct Entry* entry) {
 
 
 char* parse_color(char* color, int fg) {
-    if (color == NULL)
-        return NULL;
+    if (color == NULL || *color == '\0')
+        return COLOR_DEFAULT;
 
-    if (strcmp(color, "black") == 0)    return fg ? COLOR_FG_BLACK   : COLOR_BG_BLACK;
-    if (strcmp(color, "blue") == 0)     return fg ? COLOR_FG_BLUE    : COLOR_BG_BLUE;
-    if (strcmp(color, "cyan") == 0)     return fg ? COLOR_FG_CYAN    : COLOR_BG_CYAN;
-    if (strcmp(color, "green") == 0)    return fg ? COLOR_FG_GREEN   : COLOR_BG_GREEN;
-    if (strcmp(color, "magenta") == 0)  return fg ? COLOR_FG_MAGENTA : COLOR_BG_MAGENTA;
-    if (strcmp(color, "red") == 0)      return fg ? COLOR_FG_RED     : COLOR_BG_RED;
-    if (strcmp(color, "white") == 0)    return fg ? COLOR_FG_WHITE   : COLOR_BG_WHITE;
-    if (strcmp(color, "yellow") == 0)   return fg ? COLOR_FG_YELLOW  : COLOR_BG_YELLOW;
+    /* Check first character for faster filtering */
+    switch (*color) {
+    case 'b':
+        if (strcmp(color, "black") == 0) return fg ? COLOR_FG_BLACK : COLOR_BG_BLACK;
+        if (strcmp(color, "blue") == 0)  return fg ? COLOR_FG_BLUE  : COLOR_BG_BLUE;
+        break;
+    case 'c':
+        if (strcmp(color, "cyan") == 0)  return fg ? COLOR_FG_CYAN  : COLOR_BG_CYAN;
+        break;
+    case 'g':
+        if (strcmp(color, "green") == 0) return fg ? COLOR_FG_GREEN : COLOR_BG_GREEN;
+        break;
+    case 'm':
+        if (strcmp(color, "magenta") == 0) return fg ? COLOR_FG_MAGENTA : COLOR_BG_MAGENTA;
+        break;
+    case 'r':
+        if (strcmp(color, "red") == 0)   return fg ? COLOR_FG_RED   : COLOR_BG_RED;
+        break;
+    case 'w':
+        if (strcmp(color, "white") == 0) return fg ? COLOR_FG_WHITE : COLOR_BG_WHITE;
+        break;
+    case 'y':
+        if (strcmp(color, "yellow") == 0) return fg ? COLOR_FG_YELLOW : COLOR_BG_YELLOW;
+        break;
+    }
 
-    return "";
+    return COLOR_DEFAULT;
 }
 
 
@@ -362,6 +384,7 @@ struct Entry* parse_entry(char* ptr) {
             if (string_startswith(ptr, g_parameter_keys[i].key)) {
                 g_parameter_keys[i].val = get_value(ptr);
                 ++entry->keys_count;
+                break; /* Found match, no need to check other keys */
             }
         }
     }
@@ -372,7 +395,6 @@ struct Entry* parse_entry(char* ptr) {
 
 
 struct Entry* parse_entries(char* file_content) {
-    struct Entry* entry_head = NULL;
     struct Entry* entry_curr = NULL;
     char* ptr = file_content;
 
@@ -380,15 +402,12 @@ struct Entry* parse_entries(char* file_content) {
         entry_curr = string_startswith(ptr, "[") ? parse_entry(ptr) : NULL;
 
         if (entry_curr)
-            if (entry_head)
-                entry_append(entry_head, entry_curr);
-            else
-                entry_head = entry_curr;
+            entry_append(entry_curr);
 
     } while ((ptr = next_line(ptr)));
 
     free(file_content);
-    return entry_head;
+    return g_head;
 }
 
 
@@ -443,7 +462,8 @@ char* get_key(struct Entry* entry, char* key) {
 
 char* cmd_output(char* cmd) {
     FILE* file_ptr;
-    char buf[BUFSIZ];
+    char buf[BUFSIZ] = {0};
+    char* newline;
 
     file_ptr = popen(cmd, "r");
 
@@ -452,14 +472,12 @@ char* cmd_output(char* cmd) {
         exit(1);
     }
 
-    while (fgets(buf, sizeof(buf) - 1, file_ptr) != NULL) {
-        char* ptr = buf;
-
-        while (*ptr && *ptr != '\n')
-            ++ptr;
-
-        if (*ptr == '\n')
-            *ptr = '\0';
+    /* Read all lines but keep only the last one */
+    while (fgets(buf, sizeof(buf), file_ptr) != NULL) {
+        /* Remove trailing newline in-place */
+        newline = strchr(buf, '\n');
+        if (newline)
+            *newline = '\0';
     }
 
     pclose(file_ptr);
